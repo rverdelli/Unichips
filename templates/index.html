@@ -339,7 +339,7 @@ body {
   <!-- Upload -->
   <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handleFileSelected(this)">
   <div id="upload-area">
-    <div class="upload-label">📎 Foto della confezione <span>(obbligatoria per procedere)</span></div>
+    <div class="upload-label">📎 Foto del problema <span>(obbligatoria per procedere)</span></div>
     <div class="upload-drop" id="upload-drop" onclick="document.getElementById('photo-input').click()">
       <div id="upload-drop-text">📷 Clicca qui per scegliere una foto</div>
       <div class="upload-progress" id="upload-progress">
@@ -447,7 +447,7 @@ async function sendMessage(text) {
       if (data.phase === 'done' && !photoUploaded) {
         // All fields collected but photo missing — hold the final reply
         pendingFinish = { reply: data.reply, suggestions: data.suggestions };
-        addMessage('bot', '📋 Ho tutte le informazioni che mi servono!\n\nPrima di registrare la segnalazione ho bisogno della **foto della confezione** — caricala qui sopra per completare.');
+        addMessage('bot', '📋 Ho tutte le informazioni che mi servono!\n\nPrima di registrare la segnalazione ho bisogno di una **foto del problema** — caricala qui sopra per completare.');
         showUploadArea();
       } else {
         addMessage('bot', renderMarkdown(data.reply || ''));
