@@ -69,35 +69,29 @@ echo  ============================================
 echo   Avvio applicazioni...
 echo  ============================================
 echo.
-echo   [1] Sito pubblico + CarloBot  ->  http://localhost:8000
-echo   [2] Dashboard Admin           ->  http://localhost:8502
+echo   Sito pubblico + CarloBot  ->  http://localhost:8000
+echo   Dashboard Admin           ->  http://localhost:8000/admin
 echo.
 echo   Premi CTRL+C per fermare tutto.
 echo  ============================================
 echo.
 
-:: Avvia FastAPI (sito pubblico + chatbot API)
-start "San Carlo - Public (FastAPI)" cmd /c ".venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload"
-
-:: Piccola pausa
-timeout /t 3 /nobreak >nul
-
-:: Avvia Streamlit admin
-start "San Carlo - Admin Dashboard" cmd /c ".venv\Scripts\streamlit.exe run admin_app.py --server.port 8502 --server.headless true --browser.gatherUsageStats false"
+:: Avvia FastAPI (sito pubblico + chatbot + admin dashboard)
+start "San Carlo - Demo" cmd /c ".venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload"
 
 :: Attendi avvio
 echo Attendo avvio servizi...
-timeout /t 6 /nobreak >nul
+timeout /t 5 /nobreak >nul
 
 :: Apri browser
 start "" "http://localhost:8000"
 timeout /t 2 /nobreak >nul
-start "" "http://localhost:8502"
+start "" "http://localhost:8000/admin"
 
 echo.
 echo [OK] Demo avviata.
 echo.
 echo   Public:  http://localhost:8000
-echo   Admin:   http://localhost:8502
+echo   Admin:   http://localhost:8000/admin
 echo.
 pause

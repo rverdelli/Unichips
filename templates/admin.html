@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>San Carlo — Gestione Reclami</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+       background: #f0f2f5; color: #222; min-height: 100vh; }
+
+/* ── Header ── */
+.header {
+  background: #fff; border-bottom: 3px solid #D42B2B;
+  padding: 0 28px; height: 58px;
+  display: flex; align-items: center; gap: 16px;
+  position: sticky; top: 0; z-index: 200;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.header-logo {
+  background: #D42B2B; color: #FFD700; font-weight: 900;
+  font-size: 13px; padding: 5px 10px; border-radius: 4px;
+  line-height: 1.15; text-align: center; letter-spacing: -.3px;
+  flex-shrink: 0;
+}
+.header-title { font-size: 17px; font-weight: 700; color: #1a1a1a; flex: 1; }
+.header-sub   { font-size: 12px; color: #999; }
+.btn-config {
+  background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px;
+  padding: 7px 14px; cursor: pointer; font-size: 13px; color: #444;
+  display: flex; align-items: center; gap: 6px; transition: background .15s;
+}
+.btn-config:hover { background: #ececec; }
+
+/* ── Tabs ── */
+.tabs {
+  background: #fff; border-bottom: 1px solid #e8e8e8;
+  padding: 0 28px; display: flex; gap: 0;
+}
+.tab {
+  padding: 14px 22px; cursor: pointer; font-size: 13.5px; font-weight: 500;
+  color: #777; border-bottom: 3px solid transparent; margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.tab:hover { color: #D42B2B; }
+.tab.active { color: #D42B2B; border-bottom-color: #D42B2B; font-weight: 600; }
+
+/* ── Content ── */
+.content { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── KPI cards ── */
+.kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 22px; }
+.kpi-card {
+  background: #fff; border-radius: 12px; padding: 18px 16px;
+  border-top: 4px solid #D42B2B;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
+}
+.kpi-card.blue   { border-top-color: #2980b9; }
+.kpi-card.green  { border-top-color: #27ae60; }
+.kpi-card.orange { border-top-color: #e67e22; }
+.kpi-card.purple { border-top-color: #8e44ad; }
+.kpi-card.teal   { border-top-color: #16a085; }
+.kpi-val {
+  font-size: 28px; font-weight: 800; color: #D42B2B;
+  line-height: 1; margin-bottom: 5px;
+}
+.kpi-card.blue   .kpi-val { color: #2980b9; }
+.kpi-card.green  .kpi-val { color: #27ae60; }
+.kpi-card.orange .kpi-val { color: #e67e22; }
+.kpi-card.purple .kpi-val { color: #8e44ad; }
+.kpi-card.teal   .kpi-val { color: #16a085; }
+.kpi-label { font-size: 12px; color: #888; }
+
+/* ── Filters bar ── */
+.filters {
+  background: #fff; border-radius: 10px; padding: 14px 18px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05); margin-bottom: 18px;
+}
+.filter-select, .filter-input {
+  border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 7px 11px;
+  font-size: 13px; font-family: inherit; outline: none; background: #fafafa;
+  transition: border-color .2s;
+}
+.filter-select:focus, .filter-input:focus { border-color: #D42B2B; background: #fff; }
+.filter-input { min-width: 220px; }
+.filter-select { min-width: 140px; }
+.btn-reset {
+  background: none; border: 1.5px solid #ddd; border-radius: 8px;
+  padding: 7px 13px; font-size: 13px; color: #888; cursor: pointer;
+  transition: all .15s;
+}
+.btn-reset:hover { border-color: #D42B2B; color: #D42B2B; }
+.filter-count { margin-left: auto; font-size: 12.5px; color: #aaa; }
+
+/* ── Table ── */
+.table-wrap {
+  background: #fff; border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: #fafafa; padding: 11px 14px; text-align: left;
+  font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase;
+  letter-spacing: .4px; border-bottom: 1px solid #efefef; white-space: nowrap;
+}
+tbody tr {
+  border-bottom: 1px solid #f5f5f5; cursor: pointer;
+  transition: background .12s;
+}
+tbody tr:hover { background: #fdf5f5; }
+tbody td { padding: 11px 14px; font-size: 13px; color: #333; }
+.td-sm { font-size: 12px; color: #666; }
+.badge {
+  display: inline-block; padding: 3px 9px; border-radius: 12px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.badge-aperto      { background: #fdecea; color: #c0392b; }
+.badge-lavorazione { background: #fef3e2; color: #e67e22; }
+.badge-attesa      { background: #e8f4fd; color: #2980b9; }
+.badge-chiuso      { background: #eafaf1; color: #27ae60; }
+.badge-automatico  { background: #f4ecf7; color: #8e44ad; }
+.prio-alta   { color: #c0392b; font-weight: 700; font-size: 12px; }
+.prio-media  { color: #e67e22; font-weight: 600; font-size: 12px; }
+.prio-bassa  { color: #27ae60; font-size: 12px; }
+.ch-icon { font-size: 15px; }
+
+/* ── Pagination ── */
+.pagination { display: flex; align-items: center; gap: 8px;
+              justify-content: flex-end; padding: 12px 16px; }
+.page-btn {
+  width: 32px; height: 32px; border-radius: 8px; border: 1.5px solid #e0e0e0;
+  background: #fff; cursor: pointer; font-size: 13px; color: #555;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.page-btn:hover, .page-btn.active { background: #D42B2B; color: #fff; border-color: #D42B2B; }
+.page-info { font-size: 12px; color: #aaa; }
+
+/* ── Charts grid ── */
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.chart-card {
+  background: #fff; border-radius: 12px; padding: 20px 22px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
+}
+.chart-card.wide { grid-column: 1 / -1; }
+.chart-title { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 16px; }
+.chart-wrap { position: relative; height: 240px; }
+
+/* ── Analytics filters ── */
+.an-filters {
+  background: #fff; border-radius: 10px; padding: 14px 18px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05); margin-bottom: 22px;
+}
+.an-label { font-size: 12px; color: #aaa; margin-right: -4px; }
+input[type="date"] {
+  border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 7px 10px;
+  font-size: 13px; font-family: inherit; outline: none;
+}
+input[type="date"]:focus { border-color: #D42B2B; }
+
+/* ── Top5 table ── */
+.top5-table { width: 100%; border-collapse: collapse; }
+.top5-table td { padding: 9px 12px; font-size: 13px; border-bottom: 1px solid #f5f5f5; }
+.top5-table .rank { font-weight: 700; color: #D42B2B; width: 32px; }
+.top5-table .bar-wrap { width: 140px; }
+.top5-bar { height: 8px; border-radius: 4px; background: #D42B2B; }
+
+/* ── Modal overlay ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 500; display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 16px; width: 100%; max-width: 880px;
+  max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  animation: modalIn .22s ease;
+}
+@keyframes modalIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.modal-header {
+  padding: 18px 24px; border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.modal-title { font-size: 17px; font-weight: 700; flex: 1; }
+.modal-close {
+  width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: #f5f5f5; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center; color: #666;
+  transition: background .15s;
+}
+.modal-close:hover { background: #ececec; }
+.modal-body { padding: 22px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.section-title {
+  font-size: 11px; font-weight: 700; color: #D42B2B; text-transform: uppercase;
+  letter-spacing: .6px; margin-bottom: 12px; padding-bottom: 6px;
+  border-bottom: 1px solid #f5f5f5;
+}
+.info-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.info-label { color: #999; min-width: 130px; flex-shrink: 0; }
+.info-val { color: #222; font-weight: 500; }
+.timeline-item {
+  display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start;
+}
+.tl-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: #D42B2B;
+  margin-top: 4px; flex-shrink: 0;
+}
+.tl-dot.blue   { background: #2980b9; }
+.tl-dot.purple { background: #8e44ad; }
+.tl-dot.green  { background: #27ae60; }
+.tl-text { font-size: 12.5px; color: #444; line-height: 1.4; }
+.tl-date { font-size: 11px; color: #bbb; }
+.desc-box {
+  background: #f9f9f9; border-radius: 8px; padding: 12px 14px;
+  font-size: 13px; line-height: 1.6; color: #333; margin-top: 8px;
+}
+.photo-placeholder {
+  border: 2px dashed #e0e0e0; border-radius: 8px; padding: 18px;
+  text-align: center; color: #bbb; font-size: 12.5px; margin-top: 8px;
+}
+.response-editor {
+  width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 12px;
+  font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical;
+  min-height: 170px; outline: none; transition: border-color .2s;
+}
+.response-editor:focus { border-color: #D42B2B; }
+.modal-actions {
+  padding: 16px 24px; border-top: 1px solid #f0f0f0;
+  display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+}
+.btn { padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer;
+       font-size: 13px; font-weight: 600; transition: all .15s; }
+.btn-primary { background: #D42B2B; color: #fff; }
+.btn-primary:hover { background: #b82020; }
+.btn-secondary { background: #f5f5f5; color: #444; border: 1.5px solid #ddd; }
+.btn-secondary:hover { background: #ececec; }
+.btn-success { background: #27ae60; color: #fff; }
+.btn-success:hover { background: #219a52; }
+.btn-back { background: none; border: none; color: #D42B2B; cursor: pointer;
+            font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+/* ── Config panel ── */
+.config-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  z-index: 600; display: none;
+}
+.config-overlay.open { display: block; }
+.config-panel {
+  position: fixed; top: 0; right: 0; width: 540px; height: 100vh;
+  background: #fff; z-index: 601; display: flex; flex-direction: column;
+  box-shadow: -8px 0 32px rgba(0,0,0,.14);
+  transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+}
+.config-panel.open { transform: translateX(0); }
+.config-header {
+  padding: 20px 24px; border-bottom: 1px solid #f0f0f0;
+  display: flex; align-items: center; gap: 12px;
+}
+.config-header h2 { font-size: 16px; font-weight: 700; flex: 1; }
+.config-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.config-section { margin-bottom: 22px; }
+.config-label { font-size: 12px; font-weight: 700; color: #555;
+                text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+.config-input {
+  width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 9px 12px;
+  font-size: 13px; font-family: inherit; outline: none; background: #fafafa;
+  transition: border-color .2s;
+}
+.config-input:focus { border-color: #D42B2B; background: #fff; }
+.config-textarea {
+  width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 10px 12px;
+  font-size: 13px; font-family: inherit; outline: none; resize: vertical; min-height: 130px;
+  line-height: 1.6; background: #fafafa; transition: border-color .2s;
+}
+.config-textarea:focus { border-color: #D42B2B; background: #fff; }
+.config-footer { padding: 16px 24px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; }
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #e0e0e0; margin-right: 6px; vertical-align: middle;
+}
+.status-dot.ok   { background: #27ae60; }
+.status-dot.warn { background: #e67e22; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #27ae60; color: #fff; padding: 12px 24px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 600; z-index: 900;
+  opacity: 0; transition: all .3s; pointer-events: none;
+  box-shadow: 0 4px 20px rgba(39,174,96,.4);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.error { background: #c0392b; box-shadow: 0 4px 20px rgba(192,57,43,.4); }
+
+/* ── Empty state ── */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: #bbb;
+}
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
+/* ── Loading ── */
+.loading { text-align: center; padding: 40px; color: #bbb; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <div class="header-logo">SAN<br>CARLO</div>
+  <div>
+    <div class="header-title">Gestione Reclami San Carlo</div>
+    <div class="header-sub">Dashboard operativa interna — Customer Care</div>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+    <span id="llm-indicator" style="font-size:12px;color:#aaa;"></span>
+    <button class="btn-config" onclick="openConfig()">⚙️ Configurazione</button>
+  </div>
+</div>
+
+<!-- ── TABS ── -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('gestione')">📋 Gestione Reclami</div>
+  <div class="tab" onclick="switchTab('analisi')">📊 Analisi Reclami</div>
+</div>
+
+<!-- ── MAIN CONTENT ── -->
+<div class="content">
+
+  <!-- ══ TAB: GESTIONE ══ -->
+  <div id="tab-gestione" class="tab-panel active">
+    <!-- KPI row -->
+    <div class="kpi-row" id="kpi-gestione"></div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <select class="filter-select" id="f-status" onchange="loadComplaints()">
+        <option value="">Tutti gli stati</option>
+        <option>Aperto</option>
+        <option>In lavorazione</option>
+        <option>In attesa cliente</option>
+        <option>Chiuso</option>
+        <option>Chiuso automaticamente</option>
+      </select>
+      <select class="filter-select" id="f-category" onchange="loadComplaints()">
+        <option value="">Tutte le categorie</option>
+      </select>
+      <select class="filter-select" id="f-channel" onchange="loadComplaints()">
+        <option value="">Tutti i canali</option>
+        <option>chatbot</option><option>email</option>
+        <option>telefono</option><option>social</option>
+      </select>
+      <input class="filter-input" id="f-search" type="text"
+             placeholder="🔍 Cerca cliente, prodotto, descrizione…"
+             oninput="debounceLoad()">
+      <button class="btn-reset" onclick="resetFilters()">✕ Reset</button>
+      <span class="filter-count" id="filter-count"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th><th>Data</th><th>Cliente</th><th>Prodotto</th>
+            <th>Categoria</th><th>Stato</th><th>Priorità</th><th>Canale</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="complaints-tbody">
+          <tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>
+        </tbody>
+      </table>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+  <!-- ══ TAB: ANALISI ══ -->
+  <div id="tab-analisi" class="tab-panel">
+    <!-- Filters -->
+    <div class="an-filters">
+      <span class="an-label">Dal</span>
+      <input type="date" id="an-from" onchange="loadAnalytics()">
+      <span class="an-label">al</span>
+      <input type="date" id="an-to" onchange="loadAnalytics()">
+      <select class="filter-select" id="an-product" onchange="loadAnalytics()">
+        <option value="">Tutti i prodotti</option>
+      </select>
+      <select class="filter-select" id="an-category" onchange="loadAnalytics()">
+        <option value="">Tutte le categorie</option>
+      </select>
+      <select class="filter-select" id="an-channel" onchange="loadAnalytics()">
+        <option value="">Tutti i canali</option>
+        <option>chatbot</option><option>email</option>
+        <option>telefono</option><option>social</option>
+      </select>
+    </div>
+
+    <!-- KPI row -->
+    <div class="kpi-row" id="kpi-analisi"></div>
+
+    <!-- Charts grid -->
+    <div class="charts-grid" id="charts-grid">
+      <div class="chart-card wide">
+        <div class="chart-title">Reclami per mese (ultimi 24 mesi)</div>
+        <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Reclami per categoria</div>
+        <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Distribuzione canali</div>
+        <div class="chart-wrap"><canvas id="chart-channel"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Automatico vs Team qualità</div>
+        <div class="chart-wrap"><canvas id="chart-auto"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Tempo medio chiusura per categoria (giorni)</div>
+        <div class="chart-wrap"><canvas id="chart-avgdays"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">🏆 Top 5 prodotti con più reclami</div>
+        <div id="top5-content"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- ── COMPLAINT DETAIL MODAL ── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Reclamo #—</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<!-- ── CONFIG PANEL ── -->
+<div class="config-overlay" id="config-overlay" onclick="closeConfig(event)"></div>
+<div class="config-panel" id="config-panel">
+  <div class="config-header">
+    <h2>⚙️ Configurazione CarloBot</h2>
+    <button class="modal-close" onclick="closeConfig()">×</button>
+  </div>
+  <div class="config-body">
+    <div class="config-section">
+      <div class="config-label">🔑 Anthropic API Key</div>
+      <div id="api-key-status" style="font-size:12px;margin-bottom:6px;"></div>
+      <input class="config-input" type="password" id="cfg-apikey" placeholder="sk-ant-…">
+    </div>
+    <div class="config-section">
+      <div class="config-label">Modello Claude</div>
+      <select class="config-input" id="cfg-model">
+        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5 (veloce, economico)</option>
+        <option value="claude-sonnet-4-6">claude-sonnet-4-6 (bilanciato)</option>
+        <option value="claude-opus-4-7">claude-opus-4-7 (massima qualità)</option>
+      </select>
+    </div>
+    <div class="config-section">
+      <div class="config-label">📚 Common Knowledge Chatbot</div>
+      <textarea class="config-textarea" id="cfg-knowledge" rows="7"></textarea>
+    </div>
+    <div class="config-section">
+      <div class="config-label">📋 Regole di Classificazione Reclami</div>
+      <textarea class="config-textarea" id="cfg-rules" rows="7"></textarea>
+    </div>
+  </div>
+  <div class="config-footer">
+    <button class="btn btn-primary" onclick="saveConfig()">💾 Salva configurazione</button>
+    <button class="btn btn-secondary" onclick="closeConfig()">Annulla</button>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ════════════════════════════════════════════════════════
+const RED    = '#D42B2B';
+const COLORS = [RED,'#FFD700','#2980b9','#27ae60','#8e44ad','#e67e22','#1abc9c','#e74c3c','#95a5a6','#f39c12'];
+
+let currentPage = 0;
+const PAGE_SIZE = 50;
+let totalComplaints = 0;
+let debounceTimer = null;
+let charts = {};
+
+const STATUS_BADGE = {
+  'Aperto':               'badge-aperto',
+  'In lavorazione':       'badge-lavorazione',
+  'In attesa cliente':    'badge-attesa',
+  'Chiuso':               'badge-chiuso',
+  'Chiuso automaticamente':'badge-automatico',
+};
+const PRIO_CLASS = { 'Alta':'prio-alta','Media':'prio-media','Bassa':'prio-bassa' };
+const CH_ICON = { chatbot:'🤖', email:'📧', telefono:'📞', social:'📱' };
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  setDefaultDates();
+  await checkStatus();
+  await loadCategories();
+  await loadComplaints();
+  await loadKpiGestione();
+});
+
+function setDefaultDates() {
+  const now = new Date();
+  const from = new Date(now); from.setMonth(from.getMonth() - 24);
+  document.getElementById('an-from').value = from.toISOString().split('T')[0];
+  document.getElementById('an-to').value   = now.toISOString().split('T')[0];
+}
+
+async function checkStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const el = document.getElementById('llm-indicator');
+    el.innerHTML = d.llm_configured
+      ? '<span class="status-dot ok"></span>AI attiva'
+      : '<span class="status-dot warn"></span>Modalità offline';
+  } catch(_) {}
+}
+
+async function loadCategories() {
+  try {
+    const r = await fetch('/admin/api/stats');
+    const d = await r.json();
+    (d.unique_categories || []).forEach(c => {
+      ['f-category','an-category'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) { const o = document.createElement('option'); o.value=c; o.text=c; sel.add(o); }
+      });
+    });
+    (d.unique_products || []).forEach(p => {
+      const sel = document.getElementById('an-product');
+      if (sel) { const o = document.createElement('option'); o.value=p; o.text=p; sel.add(o); }
+    });
+  } catch(_) {}
+}
+
+// ════════════════════════════════════════════════════════
+// TABS
+// ════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['gestione','analisi'];
+    t.classList.toggle('active', names[i] === tab);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'tab-' + tab)
+  );
+  if (tab === 'analisi') loadAnalytics();
+}
+
+// ════════════════════════════════════════════════════════
+// COMPLAINTS LIST
+// ════════════════════════════════════════════════════════
+function debounceLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(loadComplaints, 340);
+}
+
+function resetFilters() {
+  ['f-status','f-category','f-channel'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-search').value = '';
+  currentPage = 0;
+  loadComplaints();
+}
+
+async function loadComplaints(page = 0) {
+  currentPage = page;
+  const params = new URLSearchParams({
+    status:   document.getElementById('f-status').value,
+    category: document.getElementById('f-category').value,
+    channel:  document.getElementById('f-channel').value,
+    search:   document.getElementById('f-search').value,
+    limit:    PAGE_SIZE,
+    offset:   page * PAGE_SIZE,
+  });
+  const tbody = document.getElementById('complaints-tbody');
+  tbody.innerHTML = '<tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>';
+  try {
+    const r = await fetch('/admin/api/complaints?' + params);
+    const d = await r.json();
+    totalComplaints = d.total;
+    document.getElementById('filter-count').textContent =
+      d.total + ' reclami trovati';
+    renderTable(d.items);
+    renderPagination(d.total, page);
+    loadKpiGestione();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#c0392b;padding:20px;">Errore nel caricamento dati.</td></tr>';
+  }
+}
+
+function renderTable(items) {
+  const tbody = document.getElementById('complaints-tbody');
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="9">
+      <div class="empty-state"><div class="empty-icon">📭</div><p>Nessun reclamo trovato.</p></div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map(c => `
+    <tr onclick="openModal(${c.id})">
+      <td><strong>#${c.id}</strong></td>
+      <td class="td-sm">${(c.created_at||'').slice(0,10)}</td>
+      <td>${esc(c.customer_name||'—')}</td>
+      <td class="td-sm">${esc(c.product||'—')}</td>
+      <td class="td-sm">${esc(c.problem_category||'—')}</td>
+      <td><span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span></td>
+      <td><span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span></td>
+      <td><span class="ch-icon">${CH_ICON[c.channel]||'📌'}</span> <span class="td-sm">${c.channel||'—'}</span></td>
+      <td onclick="event.stopPropagation()">
+        ${!['Chiuso','Chiuso automaticamente'].includes(c.status)
+          ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;"
+               onclick="quickClose(${c.id})">✓ Chiudi</button>`
+          : ''}
+      </td>
+    </tr>`).join('');
+}
+
+function renderPagination(total, page) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) { document.getElementById('pagination').innerHTML=''; return; }
+  let html = `<span class="page-info">${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE,total)} di ${total}</span>`;
+  if (page > 0) html += `<button class="page-btn" onclick="loadComplaints(${page-1})">‹</button>`;
+  for (let i = Math.max(0,page-2); i < Math.min(pages, page+3); i++) {
+    html += `<button class="page-btn ${i===page?'active':''}" onclick="loadComplaints(${i})">${i+1}</button>`;
+  }
+  if (page < pages-1) html += `<button class="page-btn" onclick="loadComplaints(${page+1})">›</button>`;
+  document.getElementById('pagination').innerHTML = html;
+}
+
+async function quickClose(id) {
+  await fetch(`/admin/api/complaints/${id}`, {
+    method: 'PATCH', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({status:'Chiuso'})
+  });
+  showToast(`Reclamo #${id} chiuso`);
+  loadComplaints(currentPage);
+}
+
+// ════════════════════════════════════════════════════════
+// KPI (gestione tab)
+// ════════════════════════════════════════════════════════
+async function loadKpiGestione() {
+  try {
+    const r = await fetch('/admin/api/stats');
+    const d = await r.json();
+    const k = d.kpis;
+    document.getElementById('kpi-gestione').innerHTML = `
+      ${kpiCard('',  k.total,   'Reclami totali', '')}
+      ${kpiCard('blue',   k.open,    'Aperti', '')}
+      ${kpiCard('purple', k.auto,    'Chiusi automaticamente', '')}
+      ${kpiCard('orange', k.pending, 'Da gestire', '')}
+      ${kpiCard('green',  k.avg_days !== null ? k.avg_days+'gg' : '—', 'Giorni medi chiusura', '')}
+      ${kpiCard('teal',   k.top_cat||'—', 'Categoria top', '')}`;
+  } catch(_) {}
+}
+
+function kpiCard(color, val, label) {
+  return `<div class="kpi-card ${color}">
+    <div class="kpi-val">${val??'—'}</div>
+    <div class="kpi-label">${label}</div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════
+// MODAL DETAIL
+// ════════════════════════════════════════════════════════
+async function openModal(id) {
+  const r = await fetch(`/admin/api/complaints/${id}`);
+  const c = await r.json();
+  document.getElementById('modal-title').textContent = `Reclamo #${c.id} — ${c.customer_name||''}`;
+
+  const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
+  const prioSpan    = `<span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span>`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <!-- Left col -->
+    <div>
+      <div class="section-title">Dati reclamo</div>
+      ${infoRow('ID', '#'+c.id)}
+      ${infoRow('Data apertura', (c.created_at||'').slice(0,16))}
+      ${infoRow('Cliente', c.customer_name||'—')}
+      ${infoRow('Email', c.customer_email||'—')}
+      ${infoRow('Prodotto', c.product||'—')}
+      ${infoRow('Categoria', c.problem_category||'—')}
+      ${infoRow('Codice lotto', c.lot_code||'—')}
+      ${infoRow('Scadenza', c.expiry_date||'—')}
+      ${infoRow('Punto vendita', c.purchase_location||'—')}
+      ${infoRow('Canale', (CH_ICON[c.channel]||'')+ ' ' +(c.channel||'—'))}
+      ${infoRow('Classificazione', c.classification||'—')}
+      ${infoRow('Risposta automatica', c.auto_response ? '✅ Sì' : '❌ No')}
+      ${infoRow('Stato', statusBadge)}
+      ${infoRow('Priorità', prioSpan)}
+
+      <div class="section-title" style="margin-top:16px;">Descrizione cliente</div>
+      <div class="desc-box">${esc(c.description||'—')}</div>
+
+      <div class="section-title" style="margin-top:16px;">Timeline</div>
+      <div class="timeline-item">
+        <div class="tl-dot"></div>
+        <div><div class="tl-text"><strong>Reclamo aperto</strong></div>
+             <div class="tl-date">${(c.created_at||'').slice(0,16)}</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-dot blue"></div>
+        <div><div class="tl-text"><strong>Classificazione:</strong> ${c.classification||'—'}</div>
+             <div class="tl-date">Automatica</div></div>
+      </div>
+      ${c.auto_response ? `<div class="timeline-item">
+        <div class="tl-dot purple"></div>
+        <div><div class="tl-text"><strong>Risposta automatica inviata</strong></div></div>
+      </div>` : ''}
+      ${c.closed_at ? `<div class="timeline-item">
+        <div class="tl-dot green"></div>
+        <div><div class="tl-text"><strong>Reclamo chiuso</strong></div>
+             <div class="tl-date">${(c.closed_at||'').slice(0,16)}</div></div>
+      </div>` : ''}
+
+      <div class="section-title" style="margin-top:16px;">Allegati</div>
+      <div class="photo-placeholder">
+        ${c.has_photo ? '📸 Foto confezione allegata' : '📎 Nessuna foto allegata'}
+      </div>
+    </div>
+
+    <!-- Right col -->
+    <div>
+      <div class="section-title">Cambia stato</div>
+      <select class="filter-select" id="modal-status" style="width:100%;margin-bottom:14px;">
+        ${['Aperto','In lavorazione','In attesa cliente','Chiuso','Chiuso automaticamente']
+          .map(s => `<option ${s===c.status?'selected':''}>${s}</option>`).join('')}
+      </select>
+
+      <div class="section-title">Risposta AI proposta</div>
+      <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">
+        Modifica il testo prima di inviarlo al cliente
+      </div>
+      <textarea class="response-editor" id="modal-response">${esc(c.ai_response||'')}</textarea>
+    </div>`;
+
+  document.getElementById('modal-actions').innerHTML = `
+    <button class="btn btn-primary" onclick="sendResponse(${c.id}, false)">📨 Invia risposta</button>
+    <button class="btn btn-success" onclick="sendResponse(${c.id}, true)">✅ Invia e chiudi</button>
+    <button class="btn btn-secondary" onclick="saveDraft(${c.id})">💾 Salva bozza</button>
+    <button class="btn btn-secondary" onclick="updateStatus(${c.id})" style="margin-left:auto;">
+      Aggiorna stato
+    </button>`;
+
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  loadComplaints(currentPage);
+}
+
+function infoRow(label, val) {
+  return `<div class="info-row"><span class="info-label">${label}</span><span class="info-val">${val}</span></div>`;
+}
+
+async function sendResponse(id, andClose) {
+  const resp = document.getElementById('modal-response').value;
+  const update = { ai_response: resp };
+  if (andClose) update.status = 'Chiuso';
+  await fetch(`/admin/api/complaints/${id}`, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(update)
+  });
+  showToast(andClose ? `Risposta inviata e reclamo #${id} chiuso` : `Risposta inviata a cliente`);
+  if (andClose) { closeModal(); } else { loadComplaints(currentPage); }
+}
+
+async function saveDraft(id) {
+  const resp = document.getElementById('modal-response').value;
+  await fetch(`/admin/api/complaints/${id}`, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ai_response: resp})
+  });
+  showToast('Bozza salvata');
+}
+
+async function updateStatus(id) {
+  const status = document.getElementById('modal-status').value;
+  await fetch(`/admin/api/complaints/${id}`, {
+    method:'PATCH', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+  showToast(`Stato aggiornato: ${status}`);
+  loadComplaints(currentPage);
+}
+
+// ════════════════════════════════════════════════════════
+// ANALYTICS
+// ════════════════════════════════════════════════════════
+async function loadAnalytics() {
+  const params = new URLSearchParams({
+    date_from: document.getElementById('an-from').value,
+    date_to:   document.getElementById('an-to').value,
+    product:   document.getElementById('an-product').value,
+    category:  document.getElementById('an-category').value,
+    channel:   document.getElementById('an-channel').value,
+  });
+  try {
+    const r = await fetch('/admin/api/stats?' + params);
+    const d = await r.json();
+    renderKpiAnalisi(d.kpis);
+    renderCharts(d);
+    renderTop5(d.top5_products);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderKpiAnalisi(k) {
+  document.getElementById('kpi-analisi').innerHTML = `
+    ${kpiCard('',       k.total,   'Reclami totali')}
+    ${kpiCard('blue',   k.open,    'Aperti')}
+    ${kpiCard('purple', k.auto,    'Chiusi automaticamente')}
+    ${kpiCard('orange', k.pending, 'Da gestire')}
+    ${kpiCard('green',  k.avg_days !== null ? k.avg_days+'gg' : '—', 'Giorni medi chiusura')}
+    ${kpiCard('teal',   k.top_cat||'—', 'Categoria top')}`;
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderCharts(d) {
+  // Monthly bar
+  destroyChart('monthly');
+  charts['monthly'] = new Chart(document.getElementById('chart-monthly'), {
+    type: 'bar',
+    data: {
+      labels: d.monthly.map(m => m.month),
+      datasets: [{ data: d.monthly.map(m => m.count), backgroundColor: RED,
+                   borderRadius: 4, borderSkipped: false }]
+    },
+    options: { ...baseOpts(), plugins: { legend: { display: false } },
+               scales: { x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+                         y: { beginAtZero: true, ticks: { precision: 0 } } } }
+  });
+
+  // Category donut
+  destroyChart('category');
+  charts['category'] = new Chart(document.getElementById('chart-category'), {
+    type: 'doughnut',
+    data: {
+      labels: d.by_category.map(x => x.label),
+      datasets: [{ data: d.by_category.map(x => x.value), backgroundColor: COLORS,
+                   borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
+    },
+    options: { ...baseOpts(), cutout: '55%', plugins: { legend: { position: 'right',
+      labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } } }
+  });
+
+  // Channel donut
+  destroyChart('channel');
+  charts['channel'] = new Chart(document.getElementById('chart-channel'), {
+    type: 'doughnut',
+    data: {
+      labels: d.by_channel.map(x => x.label),
+      datasets: [{ data: d.by_channel.map(x => x.value), backgroundColor: COLORS,
+                   borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
+    },
+    options: { ...baseOpts(), cutout: '55%', plugins: { legend: { position: 'right',
+      labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } } }
+  });
+
+  // Auto vs manual donut
+  destroyChart('auto');
+  charts['auto'] = new Chart(document.getElementById('chart-auto'), {
+    type: 'doughnut',
+    data: {
+      labels: d.auto_vs_manual.map(x => x.label),
+      datasets: [{ data: d.auto_vs_manual.map(x => x.value),
+                   backgroundColor: ['#8e44ad', RED], borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
+    },
+    options: { ...baseOpts(), cutout: '55%', plugins: { legend: { position: 'right',
+      labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } } }
+  });
+
+  // Avg days horizontal bar
+  destroyChart('avgdays');
+  charts['avgdays'] = new Chart(document.getElementById('chart-avgdays'), {
+    type: 'bar',
+    data: {
+      labels: d.avg_by_cat.map(x => x.label),
+      datasets: [{ data: d.avg_by_cat.map(x => x.value), backgroundColor: RED,
+                   borderRadius: 4 }]
+    },
+    options: { ...baseOpts(), indexAxis: 'y',
+               plugins: { legend: { display: false } },
+               scales: { x: { beginAtZero: true, title: { display: true, text: 'giorni', font: { size: 11 } } },
+                         y: { ticks: { font: { size: 11 } } } } }
+  });
+}
+
+function baseOpts() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { font: { size: 12 } } },
+               tooltip: { bodyFont: { size: 12 } } }
+  };
+}
+
+function renderTop5(items) {
+  if (!items || !items.length) { document.getElementById('top5-content').innerHTML='<div class="empty-state"><p>Nessun dato</p></div>'; return; }
+  const max = items[0].count;
+  document.getElementById('top5-content').innerHTML = `
+    <table class="top5-table">
+      ${items.map((p,i) => `
+        <tr>
+          <td class="rank">${i+1}</td>
+          <td>${esc(p.product)}</td>
+          <td class="bar-wrap"><div class="top5-bar" style="width:${Math.round(p.count/max*100)}%"></div></td>
+          <td style="font-weight:700;color:#D42B2B;text-align:right;">${p.count}</td>
+        </tr>`).join('')}
+    </table>`;
+}
+
+// ════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════
+async function openConfig() {
+  try {
+    const r = await fetch('/admin/api/config');
+    const d = await r.json();
+    document.getElementById('cfg-apikey').value    = d.anthropic_api_key || '';
+    document.getElementById('cfg-model').value     = d.model || 'claude-haiku-4-5-20251001';
+    document.getElementById('cfg-knowledge').value = d.common_knowledge || '';
+    document.getElementById('cfg-rules').value     = d.classification_rules || '';
+    const hasKey = !!d.anthropic_api_key;
+    document.getElementById('api-key-status').innerHTML =
+      hasKey ? '<span class="status-dot ok"></span>API Key configurata — AI attiva'
+             : '<span class="status-dot warn"></span>API Key non configurata — modalità offline';
+  } catch(_) {}
+  document.getElementById('config-overlay').classList.add('open');
+  document.getElementById('config-panel').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeConfig(e) {
+  if (e && e.target !== document.getElementById('config-overlay')) return;
+  document.getElementById('config-overlay').classList.remove('open');
+  document.getElementById('config-panel').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+async function saveConfig() {
+  const payload = {
+    anthropic_api_key:    document.getElementById('cfg-apikey').value.trim(),
+    model:               document.getElementById('cfg-model').value,
+    common_knowledge:    document.getElementById('cfg-knowledge').value,
+    classification_rules:document.getElementById('cfg-rules').value,
+  };
+  try {
+    await fetch('/admin/api/config', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    showToast('Configurazione salvata con successo');
+    closeConfig();
+    checkStatus();
+  } catch(_) {
+    showToast('Errore nel salvataggio', true);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = (isError ? '✕ ' : '✓ ') + msg;
+  el.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3200);
+}
+
+// Close modal with ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal(); closeConfig(); }
+});
+</script>
+</body>
+</html>
