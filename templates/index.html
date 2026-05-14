@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>San Carlo — Il gusto che ci piace</title>
+<style>
+/* ── Reset & base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden; /* image fills viewport */
+}
+body {
+  background: url('/assets/sancarlo_bg.jpg') center top / cover no-repeat fixed;
+}
+
+/* ── FAB button ── */
+#fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: #D42B2B;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 24px rgba(212,43,43,0.5);
+  z-index: 1000;
+  transition: transform .2s, box-shadow .2s, background .2s;
+}
+#fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 32px rgba(212,43,43,0.65);
+  background: #b82020;
+}
+#fab svg { pointer-events: none; }
+
+/* ── Chat widget container ── */
+#chat-widget {
+  position: fixed;
+  bottom: 104px;
+  right: 28px;
+  width: 380px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.22);
+  overflow: hidden;
+  z-index: 999;
+  transform: translateY(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .28s cubic-bezier(.4,0,.2,1), opacity .28s ease;
+}
+#chat-widget.open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* ── Header ── */
+.chat-header {
+  background: #D42B2B;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.chat-header-info { flex: 1; }
+.chat-header-name { font-weight: 700; font-size: 15px; color: #fff; }
+.chat-header-status { font-size: 12px; color: rgba(255,255,255,.8); margin-top: 1px; }
+.chat-header-status::before {
+  content: '';
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #6eeb83;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.chat-close {
+  background: rgba(255,255,255,.18);
+  border: none;
+  color: #fff;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.chat-close:hover { background: rgba(255,255,255,.32); }
+
+/* ── Messages area ── */
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  max-height: 330px;
+}
+#chat-messages::-webkit-scrollbar { width: 4px; }
+#chat-messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+
+/* ── Message bubbles ── */
+.msg { display: flex; gap: 8px; align-items: flex-end; }
+.msg.user { flex-direction: row-reverse; }
+.msg-icon {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: #D42B2B;
+  color: #fff;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.msg-bubble {
+  max-width: 82%;
+  padding: 10px 13px;
+  border-radius: 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.msg.bot .msg-bubble {
+  background: #fff;
+  color: #222;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+.msg.user .msg-bubble {
+  background: #D42B2B;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+/* ── Typing indicator ── */
+.typing-indicator {
+  display: flex; gap: 8px; align-items: flex-end;
+}
+.typing-dots {
+  background: #fff;
+  border-radius: 18px 18px 18px 4px;
+  padding: 10px 14px;
+  display: flex; gap: 4px; align-items: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+.typing-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #ccc;
+  animation: blink 1.2s infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes blink {
+  0%, 80%, 100% { opacity: .3; transform: scale(.85); }
+  40%            { opacity: 1;  transform: scale(1); }
+}
+
+/* ── Suggestions ── */
+#chat-suggestions {
+  padding: 8px 12px;
+  background: #f5f5f5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  border-top: 1px solid #ebebeb;
+  flex-shrink: 0;
+}
+.sug-pill {
+  background: #fff;
+  border: 1.5px solid #D42B2B;
+  color: #D42B2B;
+  border-radius: 20px;
+  padding: 5px 13px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.sug-pill:hover { background: #D42B2B; color: #fff; }
+
+/* ── Upload area ── */
+#upload-area {
+  padding: 8px 14px;
+  background: #fff8f0;
+  border-top: 1px solid #fde8d0;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #666;
+  flex-shrink: 0;
+}
+#upload-area.visible { display: flex; }
+.upload-btn {
+  background: #fff;
+  border: 1.5px solid #e67e22;
+  color: #e67e22;
+  border-radius: 14px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.upload-btn:hover { background: #e67e22; color: #fff; }
+.upload-ok { color: #27ae60; font-size: 12px; font-weight: 600; }
+
+/* ── Offline notice ── */
+#offline-notice {
+  display: none;
+  padding: 7px 14px;
+  background: #fffde7;
+  border-top: 1px solid #ffe082;
+  font-size: 11.5px;
+  color: #777;
+  flex-shrink: 0;
+}
+#offline-notice.visible { display: block; }
+
+/* ── Input area ── */
+.chat-input-area {
+  padding: 10px 12px;
+  background: #fff;
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+#chat-input {
+  flex: 1;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 22px;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .2s;
+  color: #222;
+}
+#chat-input:focus { border-color: #D42B2B; }
+#chat-input::placeholder { color: #aaa; }
+#send-btn {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: #D42B2B;
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background .15s, transform .15s;
+}
+#send-btn:hover { background: #b82020; transform: scale(1.06); }
+#send-btn svg { pointer-events: none; }
+</style>
+</head>
+<body>
+
+<!-- FAB button -->
+<button id="fab" onclick="toggleChat()" aria-label="Apri CarloBot">
+  <svg id="fab-icon-chat" width="26" height="26" viewBox="0 0 24 24" fill="none"
+       stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+  <svg id="fab-icon-close" width="22" height="22" viewBox="0 0 24 24" fill="none"
+       stroke="#fff" stroke-width="2.5" stroke-linecap="round" style="display:none;">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+</button>
+
+<!-- Chat widget -->
+<div id="chat-widget">
+  <!-- Header -->
+  <div class="chat-header">
+    <div class="chat-avatar">🤖</div>
+    <div class="chat-header-info">
+      <div class="chat-header-name">CarloBot</div>
+      <div class="chat-header-status">Assistente Virtuale San Carlo</div>
+    </div>
+    <button class="chat-close" onclick="toggleChat()" aria-label="Chiudi">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Messages -->
+  <div id="chat-messages"></div>
+
+  <!-- Suggestions -->
+  <div id="chat-suggestions"></div>
+
+  <!-- Upload -->
+  <div id="upload-area">
+    <span>📎 Allega foto confezione (opzionale)</span>
+    <button class="upload-btn" onclick="simulateUpload()">📷 Carica foto</button>
+  </div>
+  <div id="upload-ok" style="display:none;padding:5px 14px;background:#f0faf4;
+       border-top:1px solid #c3e6cb;font-size:12px;color:#27ae60;flex-shrink:0;">
+    ✓ Foto allegata con successo
+  </div>
+
+  <!-- Offline notice -->
+  <div id="offline-notice">
+    ⚠️ Modalità offline — configura la API Key nel pannello Admin per abilitare l'AI.
+  </div>
+
+  <!-- Input -->
+  <div class="chat-input-area">
+    <input type="text" id="chat-input"
+           placeholder="Scrivi un messaggio..."
+           onkeydown="if(event.key==='Enter')sendMessage()">
+    <button id="send-btn" onclick="sendMessage()" aria-label="Invia">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+           stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let sessionId = localStorage.getItem('carlobot_session');
+if (!sessionId) {
+  sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
+  localStorage.setItem('carlobot_session', sessionId);
+}
+
+let chatOpen = false;
+let messages = [];        // {role:'bot'|'user', text:string}
+let showUpload = false;
+let photoUploaded = false;
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async function init() {
+  // Check LLM status
+  try {
+    const r = await fetch('/api/status');
+    const data = await r.json();
+    document.getElementById('offline-notice').classList.toggle('visible', !data.llm_configured);
+  } catch(_) {}
+
+  // Initial bot message
+  addMessage('bot',
+    'Ciao, sono <strong>CarloBot</strong>, l\'assistente virtuale San Carlo! 🔴\n\n' +
+    'Posso aiutarti con informazioni sui prodotti, ingredienti e segnalazioni. ' +
+    'Come posso esserti utile?'
+  );
+  renderSuggestions([
+    'Voglio sottoporre un reclamo',
+    'Dove trovo il lotto sulla confezione?',
+    'Avete prodotti senza glutine?'
+  ]);
+})();
+
+// ── Toggle chat ─────────────────────────────────────────────────────────────
+function toggleChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('chat-widget').classList.toggle('open', chatOpen);
+  document.getElementById('fab-icon-chat').style.display = chatOpen ? 'none' : '';
+  document.getElementById('fab-icon-close').style.display = chatOpen ? '' : 'none';
+  if (chatOpen) {
+    setTimeout(() => document.getElementById('chat-input').focus(), 300);
+    scrollMessages();
+  }
+}
+
+// ── Send message ─────────────────────────────────────────────────────────────
+async function sendMessage(text) {
+  const input = document.getElementById('chat-input');
+  const msg = (text !== undefined ? text : input.value).trim();
+  if (!msg) return;
+  input.value = '';
+
+  addMessage('user', escapeHtml(msg));
+  renderSuggestions([]);
+  showTyping();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: msg,
+        history: messages.slice(-12)
+      })
+    });
+    const data = await res.json();
+    hideTyping();
+
+    if (data.error) {
+      addMessage('bot', '⚠️ ' + data.error);
+    } else {
+      addMessage('bot', renderMarkdown(data.reply || ''));
+      renderSuggestions(data.suggestions || []);
+      if (data.show_upload && !photoUploaded) showUploadArea();
+    }
+  } catch(e) {
+    hideTyping();
+    addMessage('bot', '⚠️ Errore di connessione. Riprova tra qualche istante.');
+  }
+}
+
+// ── Suggestion click ─────────────────────────────────────────────────────────
+function clickSuggestion(text) {
+  sendMessage(text);
+}
+
+// ── Upload simulation ────────────────────────────────────────────────────────
+function simulateUpload() {
+  photoUploaded = true;
+  document.getElementById('upload-area').classList.remove('visible');
+  document.getElementById('upload-ok').style.display = 'block';
+  addMessage('bot', '📎 Foto ricevuta, grazie! Puoi continuare con le informazioni mancanti.');
+  scrollMessages();
+}
+
+function showUploadArea() {
+  if (!photoUploaded) {
+    document.getElementById('upload-area').classList.add('visible');
+  }
+}
+
+// ── Message rendering ────────────────────────────────────────────────────────
+function addMessage(role, html) {
+  messages.push({role, text: html});
+  const container = document.getElementById('chat-messages');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + role;
+
+  if (role === 'bot') {
+    wrap.innerHTML = `
+      <div class="msg-icon">🤖</div>
+      <div class="msg-bubble">${html}</div>`;
+  } else {
+    wrap.innerHTML = `<div class="msg-bubble">${html}</div>`;
+  }
+  container.appendChild(wrap);
+  scrollMessages();
+}
+
+function showTyping() {
+  const container = document.getElementById('chat-messages');
+  const el = document.createElement('div');
+  el.id = 'typing';
+  el.className = 'typing-indicator';
+  el.innerHTML = `
+    <div class="msg-icon">🤖</div>
+    <div class="typing-dots">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>`;
+  container.appendChild(el);
+  scrollMessages();
+}
+
+function hideTyping() {
+  const el = document.getElementById('typing');
+  if (el) el.remove();
+}
+
+function scrollMessages() {
+  const c = document.getElementById('chat-messages');
+  c.scrollTop = c.scrollHeight;
+}
+
+function renderSuggestions(sugs) {
+  const el = document.getElementById('chat-suggestions');
+  el.innerHTML = '';
+  sugs.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'sug-pill';
+    btn.textContent = s;
+    btn.onclick = () => clickSuggestion(s);
+    el.appendChild(btn);
+  });
+}
+
+// ── Markdown helpers ─────────────────────────────────────────────────────────
+function renderMarkdown(text) {
+  // Bold
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Inline code
+  text = text.replace(/`(.+?)`/g, '<code style="background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px;">$1</code>');
+  // Bullet list lines starting with -
+  text = text.replace(/^- (.+)$/gm, '<li style="margin-left:14px;margin-bottom:3px;">$1</li>');
+  text = text.replace(/(<li[^>]*>.*<\/li>\n?)+/g, m => `<ul style="margin:6px 0;padding-left:4px;">${m}</ul>`);
+  // Newlines to <br>
+  text = text.replace(/\n/g, '<br>');
+  // Clean up double <br> after block elements
+  text = text.replace(/<br><\/ul>/g, '</ul>');
+  text = text.replace(/<ul[^>]*><br>/g, m => m.replace('<br>', ''));
+  return text;
+}
+
+function escapeHtml(t) {
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

@@ -12,7 +12,6 @@ echo       (es: set ANTHROPIC_API_KEY=sk-ant-...)
 echo    2. Oppure inserirla nel pannello Admin dopo l'avvio (icona ingranaggio)
 echo.
 
-:: -- Usa chiave da ambiente se gia' impostata, altrimenti vai avanti --
 if "%ANTHROPIC_API_KEY%"=="" (
     echo  [INFO] ANTHROPIC_API_KEY non impostata - demo in modalita offline
 ) else (
@@ -28,16 +27,13 @@ python --version >nul 2>&1
 if errorlevel 1 (
     echo [ERRORE] Python non trovato nel PATH.
     echo          Installa Python 3.9+ da https://python.org e riprova.
-    echo.
     pause
     exit /b 1
 )
-
 echo [OK] Python trovato.
 
 :: -- Crea venv se non esiste --
 if not exist ".venv\Scripts\activate.bat" (
-    echo.
     echo Creazione virtual environment...
     python -m venv .venv
     if errorlevel 1 (
@@ -48,7 +44,6 @@ if not exist ".venv\Scripts\activate.bat" (
     echo [OK] Virtual environment creato.
 )
 
-:: -- Attiva venv --
 call .venv\Scripts\activate.bat
 echo [OK] Virtual environment attivato.
 
@@ -67,9 +62,6 @@ echo [OK] Dipendenze installate.
 echo.
 echo Inizializzazione dati mock...
 python init_data.py
-if errorlevel 1 (
-    echo [ATTENZIONE] Errore nell'inizializzazione dati, continuo comunque...
-)
 
 :: -- Avvia le app --
 echo.
@@ -77,35 +69,35 @@ echo  ============================================
 echo   Avvio applicazioni...
 echo  ============================================
 echo.
-echo   [1] Sito pubblico + Chatbot  ->  http://localhost:8501
-echo   [2] Dashboard Admin          ->  http://localhost:8502
+echo   [1] Sito pubblico + CarloBot  ->  http://localhost:8000
+echo   [2] Dashboard Admin           ->  http://localhost:8502
 echo.
-echo   Premi CTRL+C in questa finestra per fermare tutto.
+echo   Premi CTRL+C per fermare tutto.
 echo  ============================================
 echo.
 
-:: Avvia app pubblica in background
-start "San Carlo - Public App" cmd /c ".venv\Scripts\streamlit.exe run public_app.py --server.port 8501 --server.headless true --browser.gatherUsageStats false"
+:: Avvia FastAPI (sito pubblico + chatbot API)
+start "San Carlo - Public (FastAPI)" cmd /c ".venv\Scripts\uvicorn.exe main:app --host 0.0.0.0 --port 8000 --reload"
 
-:: Piccola pausa per non sovraccaricare
+:: Piccola pausa
 timeout /t 3 /nobreak >nul
 
-:: Avvia admin app in background
-start "San Carlo - Admin App" cmd /c ".venv\Scripts\streamlit.exe run admin_app.py --server.port 8502 --server.headless true --browser.gatherUsageStats false"
+:: Avvia Streamlit admin
+start "San Carlo - Admin Dashboard" cmd /c ".venv\Scripts\streamlit.exe run admin_app.py --server.port 8502 --server.headless true --browser.gatherUsageStats false"
 
-:: Attendi che le app si avviino
+:: Attendi avvio
 echo Attendo avvio servizi...
-timeout /t 5 /nobreak >nul
+timeout /t 6 /nobreak >nul
 
 :: Apri browser
-start "" "http://localhost:8501"
+start "" "http://localhost:8000"
 timeout /t 2 /nobreak >nul
 start "" "http://localhost:8502"
 
 echo.
-echo [OK] Demo avviata. Lascia aperta questa finestra.
+echo [OK] Demo avviata.
 echo.
-echo   Public:  http://localhost:8501
+echo   Public:  http://localhost:8000
 echo   Admin:   http://localhost:8502
 echo.
 pause
