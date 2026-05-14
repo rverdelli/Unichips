@@ -510,18 +510,24 @@ function renderSuggestions(sugs) {
 
 // ── Markdown helpers ─────────────────────────────────────────────────────────
 function renderMarkdown(text) {
+  // Headings (must run before bold/italic)
+  text = text.replace(/^### (.+)$/gm, '<div style="font-size:13px;font-weight:700;margin:10px 0 4px;">$1</div>');
+  text = text.replace(/^## (.+)$/gm,  '<div style="font-size:14px;font-weight:700;margin:12px 0 4px;">$1</div>');
+  text = text.replace(/^# (.+)$/gm,   '<div style="font-size:15px;font-weight:700;margin:12px 0 6px;">$1</div>');
   // Bold
   text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   // Italic
   text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
   // Inline code
   text = text.replace(/`(.+?)`/g, '<code style="background:#f0f0f0;padding:1px 5px;border-radius:3px;font-size:12px;">$1</code>');
-  // Bullet list lines starting with -
-  text = text.replace(/^- (.+)$/gm, '<li style="margin-left:14px;margin-bottom:3px;">$1</li>');
+  // Bullet list lines starting with - or *  (after bold/italic so * isn't confused)
+  text = text.replace(/^[*-] (.+)$/gm, '<li style="margin-left:14px;margin-bottom:3px;">$1</li>');
   text = text.replace(/(<li[^>]*>.*<\/li>\n?)+/g, m => `<ul style="margin:6px 0;padding-left:4px;">${m}</ul>`);
   // Newlines to <br>
   text = text.replace(/\n/g, '<br>');
-  // Clean up double <br> after block elements
+  // Clean up extra <br> adjacent to block elements
+  text = text.replace(/<br>(<\/?div)/g, '$1');
+  text = text.replace(/(<\/div>)<br>/g, '$1');
   text = text.replace(/<br><\/ul>/g, '</ul>');
   text = text.replace(/<ul[^>]*><br>/g, m => m.replace('<br>', ''));
   return text;
