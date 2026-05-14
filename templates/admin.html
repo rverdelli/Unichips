@@ -362,11 +362,6 @@ input[type="date"]:focus { border-color: #D42B2B; }
       <select class="filter-select" id="f-category" onchange="loadComplaints()">
         <option value="">Tutte le categorie</option>
       </select>
-      <select class="filter-select" id="f-channel" onchange="loadComplaints()">
-        <option value="">Tutti i canali</option>
-        <option>chatbot</option><option>email</option>
-        <option>telefono</option><option>social</option>
-      </select>
       <input class="filter-input" id="f-search" type="text"
              placeholder="🔍 Cerca cliente, prodotto, descrizione…"
              oninput="debounceLoad()">
@@ -386,12 +381,11 @@ input[type="date"]:focus { border-color: #D42B2B; }
             <th class="sortable" data-col="problem_category">Categoria</th>
             <th class="sortable" data-col="status">Stato</th>
             <th class="sortable" data-col="priority">Priorità</th>
-            <th class="sortable" data-col="channel">Canale</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="complaints-tbody">
-          <tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>
+          <tr><td colspan="8"><div class="loading">Caricamento…</div></td></tr>
         </tbody>
       </table>
       <div class="pagination" id="pagination"></div>
@@ -412,11 +406,6 @@ input[type="date"]:focus { border-color: #D42B2B; }
       <select class="filter-select" id="an-category" onchange="loadAnalytics()">
         <option value="">Tutte le categorie</option>
       </select>
-      <select class="filter-select" id="an-channel" onchange="loadAnalytics()">
-        <option value="">Tutti i canali</option>
-        <option>chatbot</option><option>email</option>
-        <option>telefono</option><option>social</option>
-      </select>
     </div>
 
     <!-- KPI row -->
@@ -431,10 +420,6 @@ input[type="date"]:focus { border-color: #D42B2B; }
       <div class="chart-card">
         <div class="chart-title">Reclami per categoria</div>
         <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">Distribuzione canali</div>
-        <div class="chart-wrap"><canvas id="chart-channel"></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-title">Automatico vs Team qualità</div>
@@ -619,7 +604,7 @@ function debounceLoad() {
 
 function resetFilters() {
   document.getElementById('f-status').value = 'Aperto';
-  ['f-category','f-channel'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-category').value = '';
   document.getElementById('f-search').value = '';
   currentPage = 0;
   loadComplaints();
@@ -630,13 +615,12 @@ async function loadComplaints(page = 0) {
   const params = new URLSearchParams({
     status:   document.getElementById('f-status').value,
     category: document.getElementById('f-category').value,
-    channel:  document.getElementById('f-channel').value,
     search:   document.getElementById('f-search').value,
     limit:    PAGE_SIZE,
     offset:   page * PAGE_SIZE,
   });
   const tbody = document.getElementById('complaints-tbody');
-  tbody.innerHTML = '<tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8"><div class="loading">Caricamento…</div></td></tr>';
   try {
     const r = await fetch('/admin/api/complaints?' + params);
     const d = await r.json();
@@ -649,7 +633,7 @@ async function loadComplaints(page = 0) {
     renderPagination(d.total, page);
     loadKpiGestione();
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#c0392b;padding:20px;">Errore nel caricamento dati.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:#c0392b;padding:20px;">Errore nel caricamento dati.</td></tr>';
   }
 }
 
@@ -670,7 +654,7 @@ function renderTable(items) {
   items = sortItems(items);
   const tbody = document.getElementById('complaints-tbody');
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="9">
+    tbody.innerHTML = `<tr><td colspan="8">
       <div class="empty-state"><div class="empty-icon">📭</div><p>Nessun reclamo trovato.</p></div>
     </td></tr>`;
     return;
@@ -684,7 +668,6 @@ function renderTable(items) {
       <td class="td-sm">${esc(c.problem_category||'—')}</td>
       <td><span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span></td>
       <td><span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span></td>
-      <td><span class="ch-icon">${CH_ICON[c.channel]||'📌'}</span> <span class="td-sm">${c.channel||'—'}</span></td>
       <td onclick="event.stopPropagation()">
         ${!['Chiuso','Chiuso automaticamente'].includes(c.status)
           ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;"
@@ -764,7 +747,6 @@ async function openModal(id) {
       ${infoRow('Codice lotto', c.lot_code||'—')}
       ${infoRow('Scadenza', c.expiry_date||'—')}
       ${infoRow('Punto vendita', c.purchase_location||'—')}
-      ${infoRow('Canale', (CH_ICON[c.channel]||'')+ ' ' +(c.channel||'—'))}
       ${infoRow('Classificazione', c.classification||'—')}
       ${infoRow('Risposta automatica', c.auto_response ? '✅ Sì' : '❌ No')}
       ${infoRow('Stato', statusBadge)}
@@ -882,7 +864,6 @@ async function loadAnalytics() {
     date_to:   document.getElementById('an-to').value,
     product:   document.getElementById('an-product').value,
     category:  document.getElementById('an-category').value,
-    channel:   document.getElementById('an-channel').value,
   });
   try {
     const r = await fetch('/admin/api/stats?' + params);
@@ -931,19 +912,6 @@ function renderCharts(d) {
     data: {
       labels: d.by_category.map(x => x.label),
       datasets: [{ data: d.by_category.map(x => x.value), backgroundColor: COLORS,
-                   borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
-    },
-    options: { ...baseOpts(), cutout: '55%', plugins: { legend: { position: 'right',
-      labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } } }
-  });
-
-  // Channel donut
-  destroyChart('channel');
-  charts['channel'] = new Chart(document.getElementById('chart-channel'), {
-    type: 'doughnut',
-    data: {
-      labels: d.by_channel.map(x => x.label),
-      datasets: [{ data: d.by_channel.map(x => x.value), backgroundColor: COLORS,
                    borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
     },
     options: { ...baseOpts(), cutout: '55%', plugins: { legend: { position: 'right',

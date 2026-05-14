@@ -108,7 +108,6 @@ async def status():
 async def admin_list_complaints(
     status: str = Query("", alias="status"),
     category: str = Query("", alias="category"),
-    channel: str = Query("", alias="channel"),
     search: str = Query("", alias="search"),
     limit: int = 100,
     offset: int = 0,
@@ -116,7 +115,6 @@ async def admin_list_complaints(
     filters = {}
     if status:   filters["status"]   = status
     if category: filters["category"] = category
-    if channel:  filters["channel"]  = channel
     if search:   filters["search"]   = search
     rows = get_complaints(filters)
     total = len(rows)
@@ -149,7 +147,6 @@ async def admin_stats(
     date_to:   str = Query("", alias="date_to"),
     product:   str = Query("", alias="product"),
     category:  str = Query("", alias="category"),
-    channel:   str = Query("", alias="channel"),
 ):
     rows = get_stats()
 
@@ -168,7 +165,6 @@ async def admin_stats(
         if dt: rows = [r for r in rows if parse_dt(r.get("created_at","") or "") and parse_dt(r["created_at"]) <= dt]
     if product:  rows = [r for r in rows if r.get("product")           == product]
     if category: rows = [r for r in rows if r.get("problem_category")  == category]
-    if channel:  rows = [r for r in rows if r.get("channel")           == channel]
 
     total   = len(rows)
     open_c  = sum(1 for r in rows if r.get("status") == "Aperto")
@@ -217,12 +213,6 @@ async def admin_stats(
         prod_counts[r.get("product","—")] += 1
     by_product = [{"label": k, "value": v} for k, v in sorted(prod_counts.items(), key=lambda x: -x[1])[:10]]
 
-    # By channel
-    ch_counts = defaultdict(int)
-    for r in rows:
-        ch_counts[r.get("channel","—")] += 1
-    by_channel = [{"label": k, "value": v} for k, v in ch_counts.items()]
-
     # Auto vs manual
     auto_count   = sum(1 for r in rows if r.get("classification") == "semplice")
     manual_count = sum(1 for r in rows if r.get("classification") == "complesso")
@@ -259,7 +249,6 @@ async def admin_stats(
         "monthly":        monthly_series,
         "by_category":    by_category,
         "by_product":     by_product,
-        "by_channel":     by_channel,
         "auto_vs_manual": auto_vs_manual,
         "avg_by_cat":     avg_by_cat,
         "top5_products":  [{"product": k, "count": v} for k, v in top5],

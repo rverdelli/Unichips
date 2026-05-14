@@ -18,14 +18,12 @@ except ImportError:
     fake = Faker("it_IT")
 
 from modules.database import init_db, DB_PATH
-from modules.constants import PRODUCTS, CATEGORIES, CHANNELS, COMPLEX_CATEGORIES, PRIORITY_MAP
+from modules.constants import PRODUCTS, CATEGORIES, COMPLEX_CATEGORIES, PRIORITY_MAP
 
 CATEGORY_WEIGHTS = [20, 15, 18, 12, 8, 5, 7, 6, 4, 5]
 
-STATUSES_SIMPLE = ["Chiuso automaticamente"]
-STATUSES_COMPLEX = ["Aperto", "In lavorazione", "In attesa cliente", "Chiuso"]
-STATUS_WEIGHTS_COMPLEX = [30, 25, 15, 30]
-
+# ~20 open out of 1000 → complex complaints have a small open chance
+OPEN_BUDGET = 20
 
 DESCRIPTIONS = {
     "Patatina bruciata": [
@@ -80,16 +78,21 @@ DESCRIPTIONS = {
     ],
 }
 
-AI_RESPONSES_SIMPLE = (
-    "Gentile Cliente, la ringraziamo per la sua segnalazione. In alcuni casi possono verificarsi "
-    "leggere variazioni di colore o croccantezza dovute alle caratteristiche naturali delle patate "
-    "e al processo di cottura. La sua segnalazione è stata registrata. Cordiali saluti, Team Qualità San Carlo"
+AI_RESPONSE_SIMPLE = (
+    "Gentile Cliente, la ringraziamo per la sua segnalazione. "
+    "Si tratta di un fenomeno naturale legato alle caratteristiche delle materie prime e al processo produttivo, "
+    "che non compromette la sicurezza del prodotto. "
+    "Come gesto di attenzione nei suoi confronti, le faremo recapitare un buono acquisto da €5 "
+    "da utilizzare sui nostri prodotti entro 48 ore. "
+    "Cordiali saluti, Team Qualità San Carlo"
 )
 
-AI_RESPONSES_COMPLEX = (
-    "Gentile Cliente, abbiamo registrato la sua segnalazione. Poiché il caso richiede una verifica "
-    "più approfondita, il reclamo sarà preso in carico dal nostro team qualità. "
-    "Riceverà un aggiornamento all'indirizzo email fornito entro 2-3 giorni lavorativi. "
+AI_RESPONSE_COMPLEX = (
+    "Gentile Cliente, abbiamo ricevuto la sua segnalazione e la prendiamo con la massima serietà. "
+    "Il nostro team qualità ha preso in carico il suo caso e avvierà subito le verifiche necessarie sul lotto indicato. "
+    "La invitiamo a conservare la confezione originale con codice lotto e data di scadenza visibili. "
+    "Come rimedio immediato, le offriamo il rimborso completo del prodotto acquistato e un buono acquisto da €15. "
+    "La contatteremo all'email indicata entro 24 ore lavorative. "
     "Cordiali saluti, Team Qualità San Carlo"
 )
 
@@ -107,7 +110,9 @@ def generate_expiry():
 def generate_complaints(n=1000):
     now = datetime.now()
     complaints = []
-    for _ in range(n):
+    open_remaining = OPEN_BUDGET
+
+    for i in range(n):
         created_at = now - timedelta(
             days=random.randint(0, 730),
             hours=random.randint(0, 23),
@@ -117,8 +122,13 @@ def generate_complaints(n=1000):
         is_complex = category in COMPLEX_CATEGORIES
         classification = "complesso" if is_complex else "semplice"
 
-        if is_complex:
-            status = random.choices(STATUSES_COMPLEX, weights=STATUS_WEIGHTS_COMPLEX)[0]
+        # Assign status: budget ~20 open total, only complex complaints can be open
+        if is_complex and open_remaining > 0 and random.random() < 0.25:
+            status = random.choice(["Aperto", "In lavorazione", "In attesa cliente"])
+            if status == "Aperto":
+                open_remaining -= 1
+        elif is_complex:
+            status = "Chiuso"
         else:
             status = "Chiuso automaticamente"
 
@@ -129,6 +139,7 @@ def generate_complaints(n=1000):
 
         descriptions = DESCRIPTIONS.get(category, DESCRIPTIONS["Altro"])
         description = random.choice(descriptions)
+        priority = PRIORITY_MAP.get(category, "Media")
 
         complaints.append({
             "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -144,11 +155,11 @@ def generate_complaints(n=1000):
                 "Eurospin", "Lidl", "Pam", "Auchan", "Bennet", ""
             ]),
             "status": status,
-            "priority": PRIORITY_MAP.get(category, "Normale"),
-            "channel": random.choices(CHANNELS, weights=[40, 30, 20, 10])[0],
+            "priority": priority,
+            "channel": "chatbot",
             "classification": classification,
             "auto_response": 0 if is_complex else 1,
-            "ai_response": AI_RESPONSES_COMPLEX if is_complex else AI_RESPONSES_SIMPLE,
+            "ai_response": AI_RESPONSE_COMPLEX if is_complex else AI_RESPONSE_SIMPLE,
             "closed_at": closed_at,
             "has_photo": random.choices([0, 1], weights=[70, 30])[0],
         })
@@ -181,8 +192,10 @@ def main():
          :channel, :classification, :auto_response, :ai_response, :closed_at, :has_photo)
     """, complaints)
     conn.commit()
+
+    open_count = conn.execute("SELECT COUNT(*) FROM complaints WHERE status='Aperto'").fetchone()[0]
     conn.close()
-    print(f"✓ {len(complaints)} reclami inseriti in {DB_PATH}")
+    print(f"✓ {len(complaints)} reclami inseriti in {DB_PATH} ({open_count} aperti)")
 
 
 if __name__ == "__main__":

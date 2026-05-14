@@ -38,7 +38,7 @@ STATUSES = [
     "Chiuso automaticamente",
 ]
 
-PRIORITIES = ["Alta", "Media", "Bassa", "Normale"]
+PRIORITIES = ["Alta", "Media", "Bassa"]
 
 COMPLEX_CATEGORIES = frozenset({
     "Corpo estraneo",
@@ -54,10 +54,10 @@ PRIORITY_MAP = {
     "Muffa / alterazione": "Alta",
     "Confezione danneggiata": "Media",
     "Gusto anomalo": "Media",
-    "Patatina bruciata": "Bassa",
-    "Patatina verde": "Bassa",
-    "Prodotto sbriciolato": "Bassa",
-    "Altro": "Bassa",
+    "Patatina bruciata": "Media",
+    "Patatina verde": "Media",
+    "Prodotto sbriciolato": "Media",
+    "Altro": "Media",
 }
 
 COMPLAINT_INTENT_KEYWORDS = frozenset({

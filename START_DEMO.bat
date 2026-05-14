@@ -58,10 +58,19 @@ if errorlevel 1 (
 )
 echo [OK] Dipendenze installate.
 
-:: -- Init dati mock --
+:: -- Init dati mock (solo se DB vuoto o assente) --
 echo.
-echo Inizializzazione dati mock...
-python init_data.py
+set DB_PATH=data\complaints.db
+set ROW_COUNT=0
+if exist "%DB_PATH%" (
+    for /f %%i in ('.venv\Scripts\python.exe -c "import sqlite3; c=sqlite3.connect('data/complaints.db'); print(c.execute('SELECT COUNT(*) FROM complaints').fetchone()[0])" 2^>nul') do set ROW_COUNT=%%i
+)
+if "%ROW_COUNT%"=="0" (
+    echo Nessun dato trovato - inizializzazione dati mock...
+    python init_data.py
+) else (
+    echo [OK] Database esistente con %ROW_COUNT% reclami - skip inizializzazione.
+)
 
 :: -- Avvia le app --
 echo.

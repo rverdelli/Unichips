@@ -98,9 +98,6 @@ def get_complaints(filters=None):
         if filters.get("category") and filters["category"] != "Tutte":
             query += " AND problem_category = ?"
             params.append(filters["category"])
-        if filters.get("channel") and filters["channel"] != "Tutti":
-            query += " AND channel = ?"
-            params.append(filters["channel"])
         if filters.get("search"):
             s = f"%{filters['search']}%"
             query += " AND (customer_name LIKE ? OR product LIKE ? OR description LIKE ?)"
