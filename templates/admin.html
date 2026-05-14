@@ -347,7 +347,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
     <div class="filters">
       <select class="filter-select" id="f-status" onchange="loadComplaints()">
         <option value="">Tutti gli stati</option>
-        <option>Aperto</option>
+        <option selected>Aperto</option>
         <option>In lavorazione</option>
         <option>In attesa cliente</option>
         <option>Chiuso</option>
@@ -583,7 +583,8 @@ function debounceLoad() {
 }
 
 function resetFilters() {
-  ['f-status','f-category','f-channel'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-status').value = 'Aperto';
+  ['f-category','f-channel'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('f-search').value = '';
   currentPage = 0;
   loadComplaints();
