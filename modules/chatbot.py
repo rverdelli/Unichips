@@ -189,13 +189,14 @@ def process_message(
 
     # ── COLLECTING ───────────────────────────────────────────────────────────
     if phase == "collecting":
+        collected_before = dict(collected)
+
+        wf = state.get("waiting_for")
+
         if llm.is_configured(config):
-            collected = llm.extract_complaint_fields(user_text, collected, config)
+            collected = llm.extract_complaint_fields(user_text, collected, config, waiting_for=wf)
         else:
             collected = _extract_fields_regex(user_text, collected)
-
-        # If we were waiting for a specific field and it's still missing, use raw input
-        wf = state.get("waiting_for")
         if wf and not collected.get(wf):
             raw = user_text.strip()[:MAX_FIELD_LENGTH]
             if wf == "lot_code":
@@ -226,6 +227,22 @@ def process_message(
                 collected["product"] = match
             else:
                 collected.pop("product")
+                # If we were specifically waiting for product, show the available list.
+                # Also clear description if the LLM incorrectly stored the user's product
+                # answer as a description (description was newly set this turn to the raw input).
+                if wf == "product":
+                    if (not collected_before.get("description")
+                            and collected.get("description") == user_text.strip()):
+                        collected.pop("description", None)
+                    product_list = "\n".join(f"- {p}" for p in PRODUCTS)
+                    state["collected"] = collected
+                    state["waiting_for"] = "product"
+                    return (
+                        f"Non ho trovato quel prodotto tra quelli disponibili. "
+                        f"Ecco i prodotti San Carlo:\n\n{product_list}\n\n"
+                        "Puoi indicarmi quale hai acquistato?",
+                        state, []
+                    )
 
         state["collected"] = collected
         missing = get_missing_fields(collected)

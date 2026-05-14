@@ -68,7 +68,7 @@ def _parse_json_block(text: str) -> dict:
 
 # ── Public functions ─────────────────────────────────────────────────────────
 
-def extract_complaint_fields(user_text: str, already_collected: dict, config: dict) -> dict:
+def extract_complaint_fields(user_text: str, already_collected: dict, config: dict, waiting_for: str | None = None) -> dict:
     """
     Use Claude to extract structured complaint fields from free-form Italian text.
     Returns only the fields actually found in the message (no inference).
@@ -96,6 +96,14 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         "Rispondi SOLO con un oggetto JSON valido, senza testo aggiuntivo."
     )
 
+    waiting_hint = (
+        f"\nATTENZIONE: il bot sta aspettando il campo '{waiting_for}'. "
+        "Il messaggio del cliente è probabilmente una risposta a questa domanda specifica. "
+        f"Prova ad estrarre prima di tutto il campo '{waiting_for}'. "
+        "NON inserire il testo in un campo diverso (es. non mettere il nome di un prodotto in 'description').\n"
+        if waiting_for else ""
+    )
+
     user_prompt = (
         f"Informazioni già raccolte (non ripetere): {already_str}\n\n"
         f"Messaggio del cliente: {user_text}\n\n"
@@ -109,6 +117,7 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         f"IMPORTANTE: il campo product deve essere ESATTAMENTE uno di questi valori: {', '.join(PRODUCTS)}. "
         "Se il cliente menziona un gusto o sapore (es. 'paprika', 'classica', 'tartufo') cerca di abbinarlo "
         "al nome prodotto corretto della lista. Se non riesci ad abbinarlo con certezza, NON includere il campo product.\n"
+        + waiting_hint +
         "Includi SOLO i campi trovati nel messaggio. Rispondi con JSON."
     )
 
