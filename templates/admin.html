@@ -1059,20 +1059,19 @@ function esc(s) {
 
 function formatAiResponse(text) {
   if (!text) return '';
-  // Split into sentences
   const sentences = text.split(/(?<=\.)\s+/).filter(Boolean);
   if (sentences.length <= 1) return `<p>${esc(text)}</p>`;
 
-  const parts = [];
-  // First sentence: greeting → bold
-  parts.push(`<p><strong>${esc(sentences[0])}</strong></p>`);
-  // Middle body sentences → grouped into one paragraph
-  if (sentences.length > 2) {
-    parts.push(`<p>${sentences.slice(1, -1).map(esc).join(' ')}</p>`);
-  }
-  // Last sentence: closing → bold italic
-  parts.push(`<p><strong><em>${esc(sentences[sentences.length - 1])}</em></strong></p>`);
-  return parts.join('');
+  const greeting = sentences[0];
+  const closing  = sentences[sentences.length - 1];
+  const body     = sentences.length > 2 ? sentences.slice(1, -1).map(esc).join(' ') : '';
+
+  return [
+    `<p>${esc(greeting)}</p>`,
+    body ? `<p>${body}</p>` : '',
+    `<p>${esc(closing)}</p>`,
+  ].filter(Boolean).join('<br>');
+}
 }
 
 function showToast(msg, isError = false) {
