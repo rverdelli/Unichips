@@ -381,7 +381,8 @@ let chatOpen = false;
 let messages = [];
 let showUpload = false;
 let photoUploaded = false;
-let pendingFinish = null;  // stores {reply, suggestions} when waiting for photo before finalizing
+let pendingFinish = null;
+let currentPhase = 'welcome';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
@@ -444,8 +445,20 @@ async function sendMessage(text) {
     if (data.error) {
       addMessage('bot', '⚠️ ' + data.error);
     } else {
+      // New complaint started: reset session so old name/email don't bleed through
+      if (currentPhase === 'done' && data.phase === 'collecting') {
+        sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
+        localStorage.setItem('carlobot_session', sessionId);
+        messages = [];
+        photoUploaded = false;
+        pendingFinish = null;
+        document.getElementById('upload-ok').style.display = 'none';
+        document.getElementById('upload-area').classList.remove('visible');
+        document.getElementById('photo-input').value = '';
+      }
+      currentPhase = data.phase || currentPhase;
+
       if (data.phase === 'done' && !photoUploaded) {
-        // All fields collected but photo missing — hold the final reply
         pendingFinish = { reply: data.reply, suggestions: data.suggestions };
         addMessage('bot', '📋 Ho tutte le informazioni che mi servono!\n\nPrima di registrare la segnalazione ho bisogno di una **foto del problema** — caricala qui sopra per completare.');
         showUploadArea();
