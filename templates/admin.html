@@ -731,6 +731,7 @@ async function openModal(id) {
   const c = await r.json();
   document.getElementById('modal-title').textContent = `Reclamo #${c.id} — ${c.customer_name||''}`;
 
+  const isClosed = ['Chiuso','Chiuso automaticamente'].includes(c.status);
   const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
   const prioSpan    = `<span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span>`;
 
@@ -784,20 +785,25 @@ async function openModal(id) {
 
     <!-- Right col -->
     <div>
-      <div class="section-title">Cambia stato</div>
-      <select class="filter-select" id="modal-status" style="width:100%;margin-bottom:14px;">
-        ${['Aperto','In lavorazione','In attesa cliente','Chiuso','Chiuso automaticamente']
-          .map(s => `<option ${s===c.status?'selected':''}>${s}</option>`).join('')}
-      </select>
-
-      <div class="section-title">Risposta AI proposta</div>
-      <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">
-        Modifica il testo prima di inviarlo al cliente
-      </div>
-      <div class="response-editor" id="modal-response" contenteditable="true">${formatAiResponse(c.ai_response||'')}</div>
+      ${isClosed ? `
+        <div class="section-title">Risposta inviata</div>
+        <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">Il reclamo è chiuso.</div>
+        <div class="response-editor" style="background:#f9f9f9;color:#666;pointer-events:none;">${formatAiResponse(c.ai_response||'—')}</div>
+      ` : `
+        <div class="section-title">Cambia stato</div>
+        <select class="filter-select" id="modal-status" style="width:100%;margin-bottom:14px;">
+          ${['Aperto','In lavorazione','In attesa cliente','Chiuso','Chiuso automaticamente']
+            .map(s => `<option ${s===c.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+        <div class="section-title">Risposta AI proposta</div>
+        <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">
+          Modifica il testo prima di inviarlo al cliente
+        </div>
+        <div class="response-editor" id="modal-response" contenteditable="true">${formatAiResponse(c.ai_response||'')}</div>
+      `}
     </div>`;
 
-  document.getElementById('modal-actions').innerHTML = `
+  document.getElementById('modal-actions').innerHTML = isClosed ? '' : `
     <button class="btn btn-primary" onclick="sendResponse(${c.id}, false)">📨 Invia risposta</button>
     <button class="btn btn-success" onclick="sendResponse(${c.id}, true)">✅ Invia e chiudi</button>
     <button class="btn btn-secondary" onclick="saveDraft(${c.id})">💾 Salva bozza</button>
