@@ -181,14 +181,19 @@ def process_message(
         if wf and not collected.get(wf):
             raw = user_text.strip()[:MAX_FIELD_LENGTH]
             if wf == "lot_code":
-                # Reject if user typed something but it doesn't match LT+5digits
-                if raw and not LOT_CODE_RE.fullmatch(raw.upper()):
+                # Search for a valid lot code anywhere in the message
+                match = LOT_CODE_RE.search(raw)
+                if match:
+                    collected["lot_code"] = match.group(0).upper()
+                else:
+                    # User typed something but it doesn't contain a valid LT+5digit code
                     state["collected"] = collected
                     state["waiting_for"] = "lot_code"
                     return LOT_CODE_HINT, state, []
-            collected[wf] = raw
+            else:
+                collected[wf] = raw
 
-        # Validate lot_code even if extracted automatically
+        # Validate lot_code even if extracted by LLM/regex (must be exactly LT+5digits)
         if collected.get("lot_code") and not LOT_CODE_RE.fullmatch(collected["lot_code"].upper()):
             collected.pop("lot_code")
             state["collected"] = collected
