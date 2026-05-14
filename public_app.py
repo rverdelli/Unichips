@@ -1,6 +1,8 @@
+import os
 import streamlit as st
-from modules.database import init_db
+from modules.database import init_db, get_chatbot_config, save_chatbot_config
 from modules.chatbot import init_state, process_message
+from modules import llm as llm_module
 
 st.set_page_config(
     page_title="San Carlo - Il gusto che ci piace",
@@ -10,6 +12,12 @@ st.set_page_config(
 )
 
 init_db()
+
+# ── API Key bootstrap ────────────────────────────────────────────────────────
+# Allow passing key via URL query param ?apikey=... for demo convenience
+_qp = st.query_params.get("apikey", "")
+if _qp and not os.environ.get("ANTHROPIC_API_KEY"):
+    os.environ["ANTHROPIC_API_KEY"] = _qp
 
 # ── Session state ────────────────────────────────────────────────────────────
 if "chat_open" not in st.session_state:
@@ -454,14 +462,15 @@ if st.session_state.chat_open:
             for i, sug in enumerate(st.session_state.suggestions):
                 with sug_cols[i]:
                     if st.button(sug, key=f"sug_{i}_{sug[:10]}", use_container_width=True):
-                        # Process suggestion click
                         st.session_state.messages.append({"role": "user", "text": sug})
-                        reply, new_state, new_sugs = process_message(sug, st.session_state.chat_state)
+                        reply, new_state, new_sugs = process_message(
+                            sug,
+                            st.session_state.chat_state,
+                            st.session_state.messages,
+                        )
                         st.session_state.chat_state = new_state
                         st.session_state.messages.append({"role": "bot", "text": reply})
                         st.session_state.suggestions = new_sugs
-
-                        # Show upload button if collecting
                         if new_state.get("phase") == "collecting":
                             st.session_state.show_upload = True
                         st.rerun()
@@ -491,11 +500,26 @@ if st.session_state.chat_open:
                 st.session_state.chat_open = False
                 st.rerun()
 
+        # API key input (shown only when not configured)
+        _cfg = get_chatbot_config()
+        if not llm_module.is_configured(_cfg):
+            st.markdown(
+                '<div style="background:#fff8e1;border-left:3px solid #FFD700;'
+                'padding:8px 12px;font-size:12px;color:#555;">'
+                '⚠️ <b>CarloBot</b> funziona in modalità offline. '
+                'Inserisci una Anthropic API Key nel pannello Admin (⚙️) per abilitare l\'AI.</div>',
+                unsafe_allow_html=True,
+            )
+
         # Text input
         user_input = st.chat_input("Scrivi un messaggio...", key="chat_input_field")
         if user_input:
             st.session_state.messages.append({"role": "user", "text": user_input})
-            reply, new_state, new_sugs = process_message(user_input, st.session_state.chat_state)
+            reply, new_state, new_sugs = process_message(
+                user_input,
+                st.session_state.chat_state,
+                st.session_state.messages,
+            )
             st.session_state.chat_state = new_state
             st.session_state.messages.append({"role": "bot", "text": reply})
             st.session_state.suggestions = new_sugs

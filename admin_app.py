@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -7,6 +8,7 @@ from modules.database import (
     init_db, get_complaints, get_complaint_by_id,
     update_complaint, get_chatbot_config, save_chatbot_config, get_stats
 )
+from modules import llm as llm_module
 
 st.set_page_config(
     page_title="San Carlo — Gestione Reclami",
@@ -163,25 +165,60 @@ if st.session_state.show_config:
     st.markdown('<div class="config-panel">', unsafe_allow_html=True)
     st.markdown("### ⚙️ Configurazione CarloBot")
     st.markdown("---")
+
+    # API Key section
+    st.markdown("**🔑 Anthropic API Key**")
+    current_key = config.get("anthropic_api_key", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+    key_status = "✅ Configurata" if llm_module.is_configured(config) else "⚠️ Non configurata — CarloBot usa modalità offline"
+    st.markdown(f'<small style="color:#666;">{key_status}</small>', unsafe_allow_html=True)
+    new_api_key = st.text_input(
+        "Anthropic API Key",
+        value=current_key,
+        type="password",
+        placeholder="sk-ant-...",
+        label_visibility="collapsed",
+        key="cfg_api_key",
+        help="La chiave viene salvata in data/chatbot_config.json (solo uso locale demo)",
+    )
+    model_options = [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6",
+        "claude-opus-4-7",
+    ]
+    current_model = config.get("model", "claude-haiku-4-5-20251001")
+    if current_model not in model_options:
+        model_options.insert(0, current_model)
+    new_model = st.selectbox("Modello Claude", model_options,
+                             index=model_options.index(current_model), key="cfg_model")
+    st.markdown("---")
+
     col_c1, col_c2 = st.columns(2)
     with col_c1:
         st.markdown("**📚 Common Knowledge Chatbot**")
         new_knowledge = st.text_area(
             "Conoscenze base del chatbot",
             value=config.get("common_knowledge", ""),
-            height=250, label_visibility="collapsed", key="cfg_knowledge"
+            height=220, label_visibility="collapsed", key="cfg_knowledge"
         )
     with col_c2:
         st.markdown("**📋 Regole di Classificazione Reclami**")
         new_rules = st.text_area(
             "Regole classificazione",
             value=config.get("classification_rules", ""),
-            height=250, label_visibility="collapsed", key="cfg_rules"
+            height=220, label_visibility="collapsed", key="cfg_rules"
         )
     col_s1, col_s2, _ = st.columns([1, 1, 4])
     with col_s1:
         if st.button("💾 Salva configurazione", type="primary"):
-            save_chatbot_config({"common_knowledge": new_knowledge, "classification_rules": new_rules})
+            save_chatbot_config({
+                "common_knowledge": new_knowledge,
+                "classification_rules": new_rules,
+                "anthropic_api_key": new_api_key.strip(),
+                "model": new_model,
+            })
+            # Also set env var for current process
+            if new_api_key.strip():
+                os.environ["ANTHROPIC_API_KEY"] = new_api_key.strip()
             st.session_state.toast = "Configurazione salvata con successo"
             st.session_state.show_config = False
             st.rerun()

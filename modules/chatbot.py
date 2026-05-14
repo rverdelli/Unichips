@@ -1,9 +1,9 @@
 """
 Chatbot conversation logic (state machine).
-Replace process_message() with LLM integration for production.
+LLM calls are delegated to modules/llm.py — swap API key to go live.
 """
-from modules.classifier import classify_complaint
-from modules.database import save_complaint
+import re
+from modules.database import save_complaint, get_chatbot_config
 
 REQUIRED_FIELDS = ["name", "email", "product", "problem_category", "lot_code", "description"]
 
@@ -41,6 +41,8 @@ CATEGORIES = [
 ]
 
 
+# ── State helpers ────────────────────────────────────────────────────────────
+
 def init_state():
     return {
         "phase": "welcome",
@@ -64,25 +66,20 @@ def build_summary(collected):
     return "\n".join(lines)
 
 
-def extract_info_from_text(text, collected):
-    """
-    Naive extraction — replace with NLP/LLM for production.
-    Tries to detect email, lot codes, etc.
-    """
-    import re
+# ── Fallback: regex-based extraction (used when API unavailable) ─────────────
+
+def _extract_fields_regex(text: str, collected: dict) -> dict:
     updated = dict(collected)
 
-    # Email
     email_match = re.search(r"[\w.\-+]+@[\w.\-]+\.\w+", text)
     if email_match and not updated.get("email"):
         updated["email"] = email_match.group(0)
 
-    # Lot code (alphanumeric 6-12 chars starting with L or digit)
-    lot_match = re.search(r"\b[Ll][0-9A-Za-z]{4,11}\b|\b\d{2}[A-Za-z]\d{2,8}\b", text)
+    # Lot code: must contain at least one digit (avoids matching common words like "lotto")
+    lot_match = re.search(r"\b[Ll]\d[0-9A-Za-z]{3,10}\b|\b\d{2}[A-Za-z]\d{2,8}\b", text)
     if lot_match and not updated.get("lot_code"):
         updated["lot_code"] = lot_match.group(0).upper()
 
-    # Product name detection
     if not updated.get("product"):
         text_lower = text.lower()
         for p in PRODUCTS:
@@ -90,19 +87,18 @@ def extract_info_from_text(text, collected):
                 updated["product"] = p
                 break
 
-    # Category detection
     if not updated.get("problem_category"):
         text_lower = text.lower()
         cat_keywords = {
-            "Patatina bruciata": ["bruciata", "bruciato", "bruciature", "nera", "scura"],
+            "Patatina bruciata": ["bruciata", "bruciato", "nera", "scura"],
             "Patatina verde": ["verde", "verdi"],
-            "Prodotto sbriciolato": ["sbriciolata", "sbriciolato", "rotta", "rotto", "frantumata"],
-            "Gusto anomalo": ["gusto strano", "sapore strano", "sapore anomalo", "non sapeva"],
-            "Corpo estraneo": ["corpo estraneo", "estraneo", "capello", "insetto", "mosca", "plastica", "metallo", "vetro", "sasso"],
-            "Confezione vuota": ["vuota", "vuoto", "aperta", "aperto"],
-            "Confezione danneggiata": ["danneggiata", "danneggiato", "busta rotta", "confezione rotta"],
-            "Odore anomalo": ["odore", "puzza", "puzzava", "cattivo odore"],
-            "Muffa / alterazione": ["muffa", "muffe", "ammuffita", "alterata"],
+            "Prodotto sbriciolato": ["sbriciolata", "rotta", "frantumata"],
+            "Gusto anomalo": ["gusto strano", "sapore strano"],
+            "Corpo estraneo": ["corpo estraneo", "capello", "insetto", "plastica", "metallo"],
+            "Confezione vuota": ["vuota", "vuoto"],
+            "Confezione danneggiata": ["danneggiata", "busta rotta"],
+            "Odore anomalo": ["odore", "puzza"],
+            "Muffa / alterazione": ["muffa", "ammuffita"],
         }
         for cat, kws in cat_keywords.items():
             if any(kw in text_lower for kw in kws):
@@ -112,19 +108,62 @@ def extract_info_from_text(text, collected):
     return updated
 
 
-def process_message(user_text, state, waiting_for_field=None):
+# ── Fallback: deterministic reply (used when API unavailable) ────────────────
+
+def _deterministic_reply(user_text: str, state: dict) -> tuple:
+    text_lower = user_text.lower()
+    if "reclamo" in text_lower or "segnalazione" in text_lower or "problema" in text_lower:
+        return (
+            "Mi dispiace per l'inconveniente. Posso aiutarti ad aprire una segnalazione. "
+            "Puoi dirmi il tuo **nome e cognome**?",
+            ["Voglio aprire un reclamo"],
+        )
+    if "lotto" in text_lower:
+        return (
+            "Il **codice lotto** si trova sul retro o sul bordo della confezione, "
+            "vicino alla data di scadenza. È una sequenza come `L23A45B`.",
+            ["Voglio sottoporre un reclamo", "Avete prodotti senza glutine?"],
+        )
+    if "glutine" in text_lower:
+        return (
+            "Alcuni prodotti come la linea Veggy Good sono disponibili senza glutine. "
+            "Verifica sempre l'etichetta del prodotto acquistato.",
+            ["Voglio sottoporre un reclamo", "Dove trovo il lotto sulla confezione?"],
+        )
+    return (
+        "Ciao! Sono qui per aiutarti. Puoi chiedermi informazioni sui prodotti "
+        "o aprire una segnalazione.",
+        ["Voglio sottoporre un reclamo", "Dove trovo il lotto sulla confezione?", "Avete prodotti senza glutine?"],
+    )
+
+
+# ── Main entry point ─────────────────────────────────────────────────────────
+
+def process_message(user_text: str, state: dict, conversation_history: list = None):
     """
     Main chatbot logic. Returns (bot_reply, updated_state, suggestions).
+    Uses LLM when configured, falls back to deterministic logic otherwise.
     """
-    phase = state["phase"]
+    from modules import llm
+
+    config = get_chatbot_config()
+    phase = state.get("phase", "welcome")
     collected = state.get("collected", {})
     suggestions = []
 
-    # --- WELCOME ---
+    # ── WELCOME ──────────────────────────────────────────────────────────────
     if phase == "welcome":
         text_lower = user_text.lower()
-        if "reclamo" in text_lower or "segnalazione" in text_lower or "problema" in text_lower:
+
+        # Detect complaint intent to transition phase immediately
+        complaint_intent = any(w in text_lower for w in [
+            "reclamo", "segnalazione", "problema", "rotto", "bruciata",
+            "corpo estraneo", "vuota", "muffa", "odore", "segnalare",
+        ])
+
+        if complaint_intent:
             state["phase"] = "collecting"
+            state["waiting_for"] = "name"
             reply = (
                 "Mi dispiace per l'inconveniente. Per gestire correttamente la tua segnalazione "
                 "ho bisogno di alcune informazioni:\n\n"
@@ -140,46 +179,26 @@ def process_message(user_text, state, waiting_for_field=None):
                 "Puoi fornirmi tutte le informazioni insieme oppure una alla volta. "
                 "Iniziamo: puoi dirmi il tuo **nome e cognome**?"
             )
-            state["waiting_for"] = "name"
+            return reply, state, []
 
-        elif "lotto" in text_lower or "confezione" in text_lower:
-            reply = (
-                "Il **codice lotto** si trova normalmente sul **retro o sul bordo della confezione**, "
-                "vicino alla data di scadenza. È una sequenza alfanumerica, ad esempio: `L23A45B` oppure `23A456`.\n\n"
-                "Hai bisogno di altro?"
-            )
-            suggestions = ["Voglio sottoporre un reclamo", "Avete prodotti senza glutine?"]
-
-        elif "glutine" in text_lower or "senza glutine" in text_lower or "celiaci" in text_lower:
-            reply = (
-                "Alcuni prodotti San Carlo possono essere **privi di glutine**, come alcune varianti della linea Veggy Good. "
-                "Ti invitiamo sempre a verificare l'etichetta del prodotto acquistato, "
-                "dove sono riportate tutte le informazioni sugli allergeni.\n\n"
-                "Per una lista aggiornata dei prodotti senza glutine, ti consigliamo di consultare "
-                "il sito ufficiale San Carlo o contattare il nostro servizio clienti.\n\n"
-                "Posso aiutarti con altro?"
-            )
-            suggestions = ["Voglio sottoporre un reclamo", "Dove trovo il lotto sulla confezione?"]
-
+        # For generic questions use LLM if available, else fallback
+        if llm.is_configured(config):
+            hist = conversation_history or []
+            reply, suggestions = llm.generate_chat_reply(user_text, hist, state, config)
         else:
-            reply = (
-                "Ciao! Sono qui per aiutarti. Puoi chiedermi informazioni sui prodotti "
-                "o aprire una segnalazione."
-            )
-            suggestions = [
-                "Voglio sottoporre un reclamo",
-                "Dove trovo il lotto sulla confezione?",
-                "Avete prodotti senza glutine?",
-            ]
+            reply, suggestions = _deterministic_reply(user_text, state)
 
         return reply, state, suggestions
 
-    # --- COLLECTING INFO ---
+    # ── COLLECTING ───────────────────────────────────────────────────────────
     if phase == "collecting":
-        # Try to extract info from what the user wrote
-        collected = extract_info_from_text(user_text, collected)
+        # Extract fields from user message
+        if llm.is_configured(config):
+            collected = llm.extract_complaint_fields(user_text, collected, config)
+        else:
+            collected = _extract_fields_regex(user_text, collected)
 
-        # If we were waiting for a specific field, assign the answer
+        # If we were waiting for a specific field and it's still empty, assign raw text
         wf = state.get("waiting_for")
         if wf and not collected.get(wf):
             collected[wf] = user_text.strip()
@@ -188,11 +207,9 @@ def process_message(user_text, state, waiting_for_field=None):
         missing = get_missing_fields(collected)
 
         if not missing:
-            # All mandatory info collected — classify and save
-            result = classify_complaint(
-                collected.get("problem_category", ""),
-                collected.get("description", ""),
-            )
+            # All mandatory fields collected — classify and save
+            from modules.classifier import classify_complaint
+            result = classify_complaint(collected, config)
             complaint_data = {**collected, **result, "channel": "chatbot"}
             complaint_id = save_complaint(complaint_data)
             state["complaint_id"] = complaint_id
@@ -206,34 +223,32 @@ def process_message(user_text, state, waiting_for_field=None):
                     f"✅ **Segnalazione #{complaint_id} registrata.**\n\n"
                     f"Riepilogo informazioni ricevute:\n{summary}\n\n"
                     "---\n"
-                    "In alcuni casi possono verificarsi leggere variazioni di colore o croccantezza "
-                    "dovute alle caratteristiche naturali delle patate e al processo di cottura. "
-                    "La tua segnalazione è stata **registrata** e sarà utilizzata per monitorare "
-                    "la qualità dei nostri prodotti.\n\n"
-                    "Riceverai una email di conferma all'indirizzo indicato."
+                    + result.get("ai_response", (
+                        "La tua segnalazione è stata registrata e sarà utilizzata "
+                        "per monitorare la qualità dei nostri prodotti."
+                    ))
+                    + "\n\nRiceverai una email di conferma all'indirizzo indicato."
                 )
             else:
                 reply = (
                     f"✅ **Segnalazione #{complaint_id} registrata.**\n\n"
                     f"Riepilogo informazioni ricevute:\n{summary}\n\n"
                     "---\n"
-                    "Poiché il caso richiede una verifica più approfondita, il reclamo sarà "
-                    "**preso in carico dal nostro team qualità**. "
-                    "Riceverai un aggiornamento all'indirizzo email fornito entro 2-3 giorni lavorativi.\n\n"
-                    "Ti invitiamo a conservare la confezione."
+                    + result.get("ai_response", (
+                        "Il reclamo sarà preso in carico dal nostro team qualità. "
+                        "Riceverai un aggiornamento via email entro 2-3 giorni lavorativi."
+                    ))
                 )
             suggestions = ["Grazie!", "Aprire un altro reclamo"]
 
         else:
-            # Ask for next missing field
             next_field = missing[0]
             state["waiting_for"] = next_field
-
             already = [f for f in REQUIRED_FIELDS if collected.get(f)]
             if already:
                 summary = build_summary(collected)
                 reply = (
-                    f"Grazie! Ho già:\n{summary}\n\n"
+                    f"Grazie! Ho già raccolto:\n{summary}\n\n"
                     f"Mi manca ancora: {FIELD_PROMPTS[next_field]}"
                 )
             else:
@@ -241,23 +256,19 @@ def process_message(user_text, state, waiting_for_field=None):
 
         return reply, state, suggestions
 
-    # --- DONE ---
+    # ── DONE ─────────────────────────────────────────────────────────────────
     if phase == "done":
         text_lower = user_text.lower()
         if "altro" in text_lower or "nuovo" in text_lower or "aprire" in text_lower:
             new_state = init_state()
             new_state["phase"] = "collecting"
             new_state["waiting_for"] = "name"
-            reply = (
-                "Certo! Apriamo una nuova segnalazione. "
-                "Puoi dirmi il tuo **nome e cognome**?"
-            )
-            return reply, new_state, []
-        else:
-            reply = (
-                "Grazie per aver contattato San Carlo! "
-                "Se hai bisogno di altro non esitare a scrivermi. 😊"
-            )
-            return reply, state, ["Aprire un altro reclamo"]
+            return "Certo! Apriamo una nuova segnalazione. Puoi dirmi il tuo **nome e cognome**?", new_state, []
+        return (
+            "Grazie per aver contattato San Carlo! "
+            "Se hai bisogno di altro non esitare a scrivermi. 😊",
+            state,
+            ["Aprire un altro reclamo"],
+        )
 
-    return "Come posso aiutarti?", state, suggestions
+    return "Come posso aiutarti?", state, []

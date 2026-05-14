@@ -6,6 +6,19 @@ echo  ============================================
 echo   SAN CARLO - Chatbot Demo - Avvio
 echo  ============================================
 echo.
+echo  NOTA: Per abilitare CarloBot con AI reale puoi:
+echo    1. Impostare la variabile d'ambiente ANTHROPIC_API_KEY prima di avviare
+echo       (es: set ANTHROPIC_API_KEY=sk-ant-...)
+echo    2. Oppure inserirla nel pannello Admin dopo l'avvio (icona ingranaggio)
+echo.
+
+:: -- Usa chiave da ambiente se gia' impostata, altrimenti vai avanti --
+if "%ANTHROPIC_API_KEY%"=="" (
+    echo  [INFO] ANTHROPIC_API_KEY non impostata - demo in modalita offline
+) else (
+    echo  [OK] ANTHROPIC_API_KEY trovata - AI abilitata
+)
+echo.
 
 :: -- Posizionati nella cartella dello script --
 cd /d "%~dp0"
