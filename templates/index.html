@@ -383,6 +383,8 @@ let showUpload = false;
 let photoUploaded = false;
 let pendingFinish = null;
 let currentPhase = 'welcome';
+let savedName = '';
+let savedEmail = '';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
@@ -445,16 +447,36 @@ async function sendMessage(text) {
     if (data.error) {
       addMessage('bot', '⚠️ ' + data.error);
     } else {
-      // New complaint started: reset session so old name/email don't bleed through
+      // Save name/email when complaint finalises
+      if (data.phase === 'done') {
+        if (data.customer_name)  savedName  = data.customer_name;
+        if (data.customer_email) savedEmail = data.customer_email;
+      }
+
+      // New complaint started: new session, reset UI, prefill known name/email
       if (currentPhase === 'done' && data.phase === 'collecting') {
         sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
         localStorage.setItem('carlobot_session', sessionId);
         messages = [];
         photoUploaded = false;
         pendingFinish = null;
+        // Reset uploader UI completely
         document.getElementById('upload-ok').style.display = 'none';
         document.getElementById('upload-area').classList.remove('visible');
         document.getElementById('photo-input').value = '';
+        const drop = document.getElementById('upload-drop');
+        drop.classList.remove('uploading');
+        document.getElementById('upload-drop-text').textContent = '📷 Clicca qui per scegliere una foto';
+        document.getElementById('upload-progress').style.display = 'none';
+        document.getElementById('upload-progress-bar').style.width = '0%';
+        // Prefill name/email in new session
+        if (savedName || savedEmail) {
+          fetch('/api/session/prefill', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ session_id: sessionId, name: savedName, email: savedEmail })
+          });
+        }
       }
       currentPhase = data.phase || currentPhase;
 

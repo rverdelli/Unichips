@@ -51,6 +51,11 @@ class ChatRequest(BaseModel):
 class ResetRequest(BaseModel):
     session_id: str
 
+class PrefillRequest(BaseModel):
+    session_id: str
+    name: str = ""
+    email: str = ""
+
 class ComplaintUpdate(BaseModel):
     status: str | None = None
     ai_response: str | None = None
@@ -73,12 +78,15 @@ async def chat(req: ChatRequest):
         state = get_session(req.session_id)
         reply, new_state, suggestions = process_message(req.message, state, req.history)
         set_session(req.session_id, new_state)
+        collected = new_state.get("collected", {})
         return {
             "reply": reply,
             "suggestions": suggestions,
             "phase": new_state.get("phase"),
             "show_upload": new_state.get("phase") == "collecting",
             "complaint_id": new_state.get("complaint_id"),
+            "customer_name":  collected.get("name")  if new_state.get("phase") == "done" else None,
+            "customer_email": collected.get("email") if new_state.get("phase") == "done" else None,
         }
     except Exception as e:
         logger.error("Chat error: %s", e, exc_info=True)
@@ -88,6 +96,17 @@ async def chat(req: ChatRequest):
 @app.post("/api/session/reset")
 async def reset_session(req: ResetRequest):
     set_session(req.session_id, init_state())
+    return {"ok": True}
+
+
+@app.post("/api/session/prefill")
+async def prefill_session(req: PrefillRequest):
+    state = get_session(req.session_id)
+    collected = state.get("collected", {})
+    if req.name:  collected["name"]  = req.name
+    if req.email: collected["email"] = req.email
+    state["collected"] = collected
+    set_session(req.session_id, state)
     return {"ok": True}
 
 
