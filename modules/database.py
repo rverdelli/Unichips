@@ -16,10 +16,12 @@ DEFAULT_COMMON_KNOWLEDGE = """- Il codice lotto è normalmente indicato sul retr
 - Per informazioni su allergeni, ingredienti o idoneità alimentari, il consumatore deve sempre fare riferimento all'etichetta del prodotto acquistato.
 - Le segnalazioni con corpo estraneo, confezione vuota, odore anomalo o possibile contaminazione devono essere inoltrate al team qualità."""
 
-DEFAULT_CLASSIFICATION_RULES = """- Reclami su patatina bruciata, patatina verde, prodotto leggermente sbriciolato o differenze lievi di colore possono ricevere risposta automatica.
-- Reclami su corpo estraneo, confezione vuota, muffa, odore anomalo, sapore fortemente alterato, confezione compromessa o possibile contaminazione devono essere inoltrati al team qualità.
-- Se il reclamo riguarda sicurezza alimentare, non fornire spiegazioni definitive e aprire sempre un ticket.
-- Se mancano codice lotto o contatto cliente, richiedere integrazione prima della presa in carico completa."""
+DEFAULT_CLASSIFICATION_RULES = """- Reclami SEMPLICI (risposta automatica, chiusura immediata): patatina bruciata/scura, patatina verde, prodotto sbriciolato, lievi variazioni di colore o forma. Per questi casi spiega cordialmente che si tratta di un fenomeno naturale legato alle materie prime o al processo produttivo, e offri sempre un buono acquisto da €5 come gesto di cortesia.
+- Reclami COMPLESSI (escalation al team qualità): corpo estraneo, confezione vuota o quasi vuota, muffa, odore anomalo, sapore fortemente alterato, possibile contaminazione, problemi di sicurezza alimentare. Per questi casi esprimi dispiacere, offri rimborso completo del prodotto + buono acquisto da €15, chiedi di conservare la confezione con codice lotto visibile, e comunica che il team la contatterà entro 24 ore lavorative.
+- Per problemi di confezione danneggiata: offri rimborso del prodotto o spedizione gratuita di un pacco sostitutivo.
+- Per problemi di gusto anomalo non grave: offri rimborso + buono da €10, chiedi codice lotto.
+- Non fornire mai spiegazioni definitive su possibili contaminazioni o corpi estranei — quelle competono al team qualità.
+- Tono sempre cordiale, empatico e propositivo: il cliente deve sentirsi ascoltato e ricevere una proposta concreta di soluzione, non solo una presa d'atto."""
 
 
 def get_connection():
