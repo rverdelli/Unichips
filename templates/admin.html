@@ -786,7 +786,7 @@ async function openModal(id) {
     <!-- Right col -->
     <div>
       ${isClosed ? `
-        <div class="section-title">Risposta inviata</div>
+        <div class="section-title">Risposta inviata al cliente</div>
         <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">Il reclamo è chiuso.</div>
         <div class="response-editor" style="background:#f9f9f9;color:#666;pointer-events:none;">${formatAiResponse(c.ai_response||'—')}</div>
       ` : `
@@ -795,11 +795,11 @@ async function openModal(id) {
           ${['Aperto','In lavorazione','In attesa cliente','Chiuso','Chiuso automaticamente']
             .map(s => `<option ${s===c.status?'selected':''}>${s}</option>`).join('')}
         </select>
-        <div class="section-title">Risposta AI proposta</div>
+        <div class="section-title">Proposta di risposta risolutiva</div>
         <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">
           Modifica il testo prima di inviarlo al cliente
         </div>
-        <div class="response-editor" id="modal-response" contenteditable="true">${formatAiResponse(c.ai_response||'')}</div>
+        <div class="response-editor" id="modal-response" contenteditable="true">${renderDraft(buildResolutionDraft(c))}</div>
       `}
     </div>`;
 
@@ -1029,6 +1029,32 @@ async function saveConfig() {
 // ════════════════════════════════════════════════════════
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderDraft(text) {
+  if (!text) return '';
+  return text.split('\n\n').map(para =>
+    `<p>${esc(para).replace(/\n/g, '<br>')}</p>`
+  ).join('');
+}
+
+function buildResolutionDraft(c) {
+  const name    = c.customer_name || 'Cliente';
+  const product = c.product       || 'il prodotto acquistato';
+  const lot     = c.lot_code      ? ` (lotto ${c.lot_code})` : '';
+  const cat     = c.problem_category || c.description || 'il problema riscontrato';
+
+  return (
+    `Gentile ${name},\n\n` +
+    `La ringraziamo per averci contattato e ci scusiamo sinceramente per il disagio causato da ${product}${lot}.\n\n` +
+    `Abbiamo preso in carico la sua segnalazione relativa a: ${cat}. ` +
+    `Il nostro team qualità ha analizzato il caso e, in segno di scuse per l'inconveniente, ` +
+    `siamo lieti di offrirle il rimborso del prodotto acquistato e un buono sconto di €5 ` +
+    `da utilizzare sul nostro store online o presso i punti vendita aderenti.\n\n` +
+    `Un nostro operatore la contatterà entro 24 ore all'indirizzo email indicato per fornirle ` +
+    `le istruzioni per il rimborso e inviarle il codice buono.\n\n` +
+    `Cordiali saluti,\nTeam Qualità San Carlo`
+  );
 }
 
 function formatAiResponse(text) {

@@ -101,11 +101,15 @@ async def reset_session(req: ResetRequest):
 
 @app.post("/api/session/prefill")
 async def prefill_session(req: PrefillRequest):
+    from modules.constants import REQUIRED_COMPLAINT_FIELDS
     state = get_session(req.session_id)
     collected = state.get("collected", {})
     if req.name:  collected["name"]  = req.name
     if req.email: collected["email"] = req.email
     state["collected"] = collected
+    state["phase"] = "collecting"
+    missing = [f for f in REQUIRED_COMPLAINT_FIELDS if not collected.get(f)]
+    state["waiting_for"] = missing[0] if missing else None
     set_session(req.session_id, state)
     return {"ok": True}
 
