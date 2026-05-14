@@ -89,6 +89,26 @@ def _extract_fields_regex(text: str, collected: dict) -> dict:
     return updated
 
 
+_CAT_KEYWORDS = {
+    "Patatina bruciata":    ["bruciata", "bruciate", "nera", "scura", "carbonizzata"],
+    "Patatina verde":       ["verde", "verdi", "inverdimento"],
+    "Prodotto sbriciolato": ["sbriciolata", "sbriciolate", "rotta", "rotte", "frantumata", "in polvere"],
+    "Gusto anomalo":        ["gusto strano", "sapore strano", "retrogusto", "amaro", "metallico"],
+    "Corpo estraneo":       ["corpo estraneo", "capello", "insetto", "mosca", "plastica", "metallo", "vetro", "frammento"],
+    "Confezione vuota":     ["vuota", "vuoto", "confezione vuota"],
+    "Confezione danneggiata": ["danneggiata", "danneggiato", "aperta", "strappata", "busta rotta"],
+    "Odore anomalo":        ["odore", "puzza", "rancido", "sgradevole"],
+    "Muffa / alterazione":  ["muffa", "ammuffita", "alterazione", "chiazze bianche"],
+}
+
+def _infer_category(description: str) -> str:
+    text = description.lower()
+    for cat, kws in _CAT_KEYWORDS.items():
+        if any(kw in text for kw in kws):
+            return cat
+    return "Altro"
+
+
 # ── Fallback: deterministic reply (used when API unavailable) ────────────────
 
 def _deterministic_reply(user_text: str, state: dict) -> tuple[str, list]:
@@ -150,12 +170,10 @@ def process_message(
                 "- Nome e cognome\n"
                 "- Email di contatto\n"
                 "- Prodotto acquistato\n"
-                "- Tipo di problema riscontrato\n"
-                "- Codice lotto\n"
+                "- Codice lotto *(formato LT seguito da 5 cifre, es. LT12345)*\n"
                 "- Data di scadenza *(se disponibile)*\n"
                 "- Luogo di acquisto *(se disponibile)*\n"
-                "- Foto della confezione *(opzionale)*\n"
-                "- Breve descrizione dell'accaduto\n\n"
+                "- Descrizione del problema\n\n"
                 "Puoi fornirmi tutte le informazioni insieme oppure una alla volta. "
                 "Iniziamo: puoi dirmi il tuo **nome e cognome**?"
             )
@@ -213,6 +231,12 @@ def process_message(
         missing = get_missing_fields(collected)
 
         if not missing:
+            # Deduce problem_category from description if not already extracted
+            if not collected.get("problem_category"):
+                collected["problem_category"] = _infer_category(
+                    collected.get("description", "")
+                )
+
             from modules.classifier import classify_complaint
             result = classify_complaint(collected, config)
             complaint_data = {**collected, **result, "channel": "chatbot"}

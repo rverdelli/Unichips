@@ -67,7 +67,7 @@ COMPLAINT_INTENT_KEYWORDS = frozenset({
 })
 
 REQUIRED_COMPLAINT_FIELDS = [
-    "name", "email", "product", "problem_category", "lot_code", "description"
+    "name", "email", "product", "lot_code", "description"
 ]
 
 FIELD_LABELS = {
