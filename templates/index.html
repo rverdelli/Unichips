@@ -378,9 +378,10 @@ if (!sessionId) {
 }
 
 let chatOpen = false;
-let messages = [];        // {role:'bot'|'user', text:string}
+let messages = [];
 let showUpload = false;
 let photoUploaded = false;
+let pendingFinish = null;  // stores {reply, suggestions} when waiting for photo before finalizing
 
 // ── Init ───────────────────────────────────────────────────────────────────
 (async function init() {
@@ -443,9 +444,16 @@ async function sendMessage(text) {
     if (data.error) {
       addMessage('bot', '⚠️ ' + data.error);
     } else {
-      addMessage('bot', renderMarkdown(data.reply || ''));
-      renderSuggestions(data.suggestions || []);
-      if (data.show_upload && !photoUploaded) showUploadArea();
+      if (data.phase === 'done' && !photoUploaded) {
+        // All fields collected but photo missing — hold the final reply
+        pendingFinish = { reply: data.reply, suggestions: data.suggestions };
+        addMessage('bot', '📋 Ho tutte le informazioni che mi servono!\n\nPrima di registrare la segnalazione ho bisogno della **foto della confezione** — caricala qui sopra per completare.');
+        showUploadArea();
+      } else {
+        addMessage('bot', renderMarkdown(data.reply || ''));
+        renderSuggestions(data.suggestions || []);
+        if (data.show_upload && !photoUploaded) showUploadArea();
+      }
     }
   } catch(e) {
     hideTyping();
@@ -478,9 +486,16 @@ function handleFileSelected(input) {
     photoUploaded = true;
     document.getElementById('upload-area').classList.remove('visible');
     document.getElementById('upload-ok').style.display = 'block';
-    document.getElementById('chat-input').disabled = false;
-    document.getElementById('send-btn').disabled = false;
-    addMessage('bot', '📎 Foto <strong>' + escapeHtml(fileName) + '</strong> ricevuta, grazie! Puoi continuare.');
+    addMessage('bot', '📎 Foto <strong>' + escapeHtml(fileName) + '</strong> ricevuta, grazie!');
+    if (pendingFinish) {
+      // Now we can show the final confirmation that was held back
+      setTimeout(() => {
+        addMessage('bot', renderMarkdown(pendingFinish.reply || ''));
+        renderSuggestions(pendingFinish.suggestions || []);
+        pendingFinish = null;
+        scrollMessages();
+      }, 400);
+    }
     scrollMessages();
   }, 1600);
 }
@@ -488,8 +503,6 @@ function handleFileSelected(input) {
 function showUploadArea() {
   if (!photoUploaded) {
     document.getElementById('upload-area').classList.add('visible');
-    document.getElementById('chat-input').disabled = true;
-    document.getElementById('send-btn').disabled = true;
   }
 }
 
