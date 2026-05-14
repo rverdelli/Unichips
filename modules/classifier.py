@@ -58,7 +58,7 @@ def _classify_mock(problem_category: str, description: str) -> dict:
     )
 
     classification = "complesso" if is_complex else "semplice"
-    priority = PRIORITY_MAP.get(problem_category, "Bassa")
+    priority = PRIORITY_MAP.get(problem_category, "Media")
 
     if classification == "semplice":
         return {
@@ -82,50 +82,45 @@ def _generate_auto_response(category: str) -> str:
         "Patatina bruciata": (
             "Gentile Cliente,\n\n"
             "la ringraziamo per averci contattato. Le patatine leggermente più scure del solito "
-            "sono un fenomeno del tutto naturale: dipende dalle patate stesse, che per la loro composizione "
-            "in zuccheri possono dorarsi in modo più intenso durante la frittura. Non si tratta di un difetto "
-            "di qualità né di un rischio per la salute.\n\n"
-            "Come segno di attenzione nei suoi confronti, le faremo recapitare un buono acquisto da €5 "
-            "da utilizzare sui nostri prodotti. La contatteremo all'indirizzo email indicato entro 48 ore.\n\n"
+            "sono un fenomeno del tutto naturale: dipende dalla composizione in zuccheri delle patate, "
+            "che possono dorarsi in modo più intenso durante la frittura. "
+            "Non si tratta di un difetto di qualità né di un rischio per la salute.\n\n"
+            "Abbiamo registrato la sua segnalazione e la utilizzeremo per monitorare i nostri processi produttivi.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
         "Patatina verde": (
             "Gentile Cliente,\n\n"
             "la ringraziamo per la segnalazione. Le patatine verdi derivano da patate che hanno subito "
             "un leggero processo di inverdimento per esposizione alla luce prima della lavorazione. "
-            "I nostri controlli di qualità prevedono la selezione di queste patate, ma in rari casi "
-            "qualcuna può sfuggire al processo di selezione ottica.\n\n"
-            "Le chiediamo scusa per l'inconveniente. Come gesto di cortesia, provvederemo a inviarle "
-            "un buono acquisto da €5 valido sul nostro shop online. La contatteremo a breve.\n\n"
+            "I nostri controlli di qualità prevedono la selezione ottica di queste patate, "
+            "ma in rari casi qualcuna può sfuggire al processo.\n\n"
+            "Abbiamo registrato la sua segnalazione e la utilizzeremo per migliorare i nostri standard.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
         "Prodotto sbriciolato": (
             "Gentile Cliente,\n\n"
             "la ringraziamo per la segnalazione. La sbriciolatura del prodotto può avvenire durante "
-            "il trasporto o la distribuzione, a causa di urti o pressioni sulle confezioni. "
+            "il trasporto o la distribuzione a causa di urti o pressioni sulle confezioni. "
             "Il prodotto rimane comunque integro e sicuro dal punto di vista alimentare.\n\n"
-            "Siamo dispiaciuti per l'inconveniente e vorremmo rimborsarle il prodotto acquistato: "
-            "la contatteremo entro 24 ore per concordare le modalità di rimborso oppure per inviarle "
-            "un pacco prodotti sostitutivo.\n\n"
+            "Abbiamo preso nota della sua segnalazione e la trasmetteremo al team logistico "
+            "per migliorare la gestione del packaging.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
         "Gusto anomalo": (
             "Gentile Cliente,\n\n"
-            "la ringraziamo per averci segnalato questo inconveniente. Lievi variazioni di gusto "
-            "possono talvolta verificarsi in base alle caratteristiche naturali delle materie prime "
+            "la ringraziamo per la segnalazione. Lievi variazioni di gusto possono occasionalmente "
+            "verificarsi in base alle caratteristiche naturali delle materie prime "
             "o alle condizioni di conservazione del prodotto.\n\n"
-            "Le chiediamo di conservare la confezione con il codice lotto visibile. "
-            "Come gesto concreto, siamo lieti di offrirle un rimborso del prodotto e un buono "
-            "acquisto da €10 da utilizzare sui nostri prodotti. La contatteremo entro 48 ore.\n\n"
+            "Le chiediamo di conservare la confezione con il codice lotto visibile: "
+            "il nostro team qualità verificherà il lotto di produzione indicato.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
         "Confezione danneggiata": (
             "Gentile Cliente,\n\n"
             "la ringraziamo per la segnalazione. La confezione potrebbe essersi danneggiata "
-            "durante il trasporto o la distribuzione — un inconveniente che ci dispiace molto.\n\n"
-            "Per rimediare, le offriamo il rimborso completo del prodotto acquistato oppure, "
-            "se preferisce, la spedizione gratuita di un pacco sostitutivo. "
-            "La contatteremo all'email indicata entro 24 ore per organizzare il tutto.\n\n"
+            "durante il trasporto o la distribuzione.\n\n"
+            "Abbiamo registrato la sua segnalazione e la trasmetteremo al team logistico "
+            "per le opportune verifiche sulla catena di distribuzione.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
     }
@@ -133,8 +128,6 @@ def _generate_auto_response(category: str) -> str:
         "Gentile Cliente,\n\n"
         "la ringraziamo per la sua segnalazione. Abbiamo registrato il suo feedback "
         "e lo utilizzeremo per migliorare la qualità dei nostri prodotti.\n\n"
-        "Come gesto di attenzione, le invieremo un buono acquisto da €5. "
-        "La contatteremo entro 48 ore.\n\n"
         "Cordiali saluti,\nTeam Qualità San Carlo"
     ))
 
