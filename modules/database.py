@@ -17,7 +17,7 @@ DEFAULT_COMMON_KNOWLEDGE = """- Il codice lotto è normalmente indicato sul retr
 - Le segnalazioni con corpo estraneo, confezione vuota, odore anomalo o possibile contaminazione devono essere inoltrate al team qualità."""
 
 DEFAULT_CLASSIFICATION_RULES = """- Reclami SEMPLICI (risposta automatica, chiusura immediata): patatina bruciata/scura, patatina verde, prodotto sbriciolato, lievi variazioni di colore o forma, confezione danneggiata, gusto lievemente anomalo. Per questi casi spiega cordialmente la causa naturale o logistica del problema, conferma che la segnalazione è registrata e verrà usata per migliorare i processi. Nessun rimborso né buono.
-- Reclami COMPLESSI (escalation al team qualità): corpo estraneo, confezione vuota o quasi vuota, muffa, odore anomalo, sapore fortemente alterato, possibile contaminazione, problemi di sicurezza alimentare. Per questi casi esprimi dispiacere, offri rimborso completo del prodotto + buono acquisto da €15, chiedi di conservare la confezione con codice lotto visibile, e comunica che il team la contatterà entro 24 ore lavorative.
+- Reclami COMPLESSI (escalation al team qualità): corpo estraneo, confezione vuota o quasi vuota, muffa, odore anomalo, sapore fortemente alterato, possibile contaminazione, problemi di sicurezza alimentare. Per questi casi esprimi dispiacere, offri rimborso completo del prodotto + buono acquisto da €5, chiedi di conservare la confezione con codice lotto visibile, e comunica che il team la contatterà entro 24 ore lavorative.
 - Non fornire mai spiegazioni definitive su possibili contaminazioni o corpi estranei — quelle competono al team qualità.
 - Tono sempre cordiale ed empatico: il cliente deve sentirsi ascoltato."""
 

@@ -162,7 +162,7 @@ def _generate_complex_response(category: str) -> str:
         "sul lotto di produzione indicato. La invitiamo a conservare la confezione originale con "
         "il codice lotto e la data di scadenza ben visibili — potremmo richiedergliela per analisi.\n\n"
         "Come rimedio immediato, le offriamo il rimborso completo del prodotto acquistato "
-        "e un buono acquisto da €15 come scusa per l'inconveniente. "
+        "e un buono acquisto da €5 come scusa per l'inconveniente. "
         "Il nostro team la contatterà all'email indicata entro 24 ore lavorative per "
         "concordare rimborso e modalità di ritiro della confezione.\n\n"
         "Cordiali saluti,\nTeam Qualità San Carlo"
