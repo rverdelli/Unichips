@@ -106,6 +106,9 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         "purchase_location (punto vendita).\n"
         "IMPORTANTE: lot_code deve essere esattamente nel formato LT seguito da 5 cifre (es. LT12345). "
         "Se il testo contiene un codice lotto con formato diverso, NON includerlo nel JSON.\n"
+        f"IMPORTANTE: il campo product deve essere ESATTAMENTE uno di questi valori: {', '.join(PRODUCTS)}. "
+        "Se il cliente menziona un gusto o sapore (es. 'paprika', 'classica', 'tartufo') cerca di abbinarlo "
+        "al nome prodotto corretto della lista. Se non riesci ad abbinarlo con certezza, NON includere il campo product.\n"
         "Includi SOLO i campi trovati nel messaggio. Rispondi con JSON."
     )
 

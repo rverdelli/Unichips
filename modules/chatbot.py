@@ -193,12 +193,21 @@ def process_message(
             else:
                 collected[wf] = raw
 
-        # Validate lot_code even if extracted by LLM/regex (must be exactly LT+5digits)
+        # Validate lot_code (must be exactly LT+5digits)
         if collected.get("lot_code") and not LOT_CODE_RE.fullmatch(collected["lot_code"].upper()):
             collected.pop("lot_code")
             state["collected"] = collected
             state["waiting_for"] = "lot_code"
             return LOT_CODE_HINT, state, []
+
+        # Validate product against the known product list
+        if collected.get("product") and collected["product"] not in PRODUCTS:
+            # Try case-insensitive match first
+            match = next((p for p in PRODUCTS if p.lower() == collected["product"].lower()), None)
+            if match:
+                collected["product"] = match
+            else:
+                collected.pop("product")
 
         state["collected"] = collected
         missing = get_missing_fields(collected)
