@@ -104,6 +104,8 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         "problem_category (categoria problema), lot_code (codice lotto), "
         "description (descrizione problema), expiry_date (data scadenza), "
         "purchase_location (punto vendita).\n"
+        "IMPORTANTE: lot_code deve essere esattamente nel formato LT seguito da 5 cifre (es. LT12345). "
+        "Se il testo contiene un codice lotto con formato diverso, NON includerlo nel JSON.\n"
         "Includi SOLO i campi trovati nel messaggio. Rispondi con JSON."
     )
 

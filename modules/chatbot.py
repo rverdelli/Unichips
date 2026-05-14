@@ -40,6 +40,14 @@ def build_summary(collected: dict) -> str:
     return "\n".join(lines)
 
 
+LOT_CODE_RE = re.compile(r'\bLT\d{5}\b', re.IGNORECASE)
+LOT_CODE_HINT = (
+    "Il codice lotto deve essere nel formato **LT seguito da 5 cifre** "
+    "(es. `LT12345`). Lo trovi sul retro o sul bordo della confezione, "
+    "vicino alla data di scadenza. Puoi riprovare?"
+)
+
+
 # ── Fallback: regex-based extraction (used when API unavailable) ─────────────
 
 def _extract_fields_regex(text: str, collected: dict) -> dict:
@@ -49,8 +57,7 @@ def _extract_fields_regex(text: str, collected: dict) -> dict:
     if email_match and not updated.get("email"):
         updated["email"] = email_match.group(0)
 
-    # Lot code: must start with L followed immediately by a digit, or dd-letter-dd pattern
-    lot_match = re.search(r"\b[Ll]\d[0-9A-Za-z]{3,10}\b|\b\d{2}[A-Za-z]\d{2,8}\b", text)
+    lot_match = LOT_CODE_RE.search(text)
     if lot_match and not updated.get("lot_code"):
         updated["lot_code"] = lot_match.group(0).upper()
 
@@ -172,7 +179,21 @@ def process_message(
         # If we were waiting for a specific field and it's still missing, use raw input
         wf = state.get("waiting_for")
         if wf and not collected.get(wf):
-            collected[wf] = user_text.strip()[:MAX_FIELD_LENGTH]
+            raw = user_text.strip()[:MAX_FIELD_LENGTH]
+            if wf == "lot_code":
+                # Reject if user typed something but it doesn't match LT+5digits
+                if raw and not LOT_CODE_RE.fullmatch(raw.upper()):
+                    state["collected"] = collected
+                    state["waiting_for"] = "lot_code"
+                    return LOT_CODE_HINT, state, []
+            collected[wf] = raw
+
+        # Validate lot_code even if extracted automatically
+        if collected.get("lot_code") and not LOT_CODE_RE.fullmatch(collected["lot_code"].upper()):
+            collected.pop("lot_code")
+            state["collected"] = collected
+            state["waiting_for"] = "lot_code"
+            return LOT_CODE_HINT, state, []
 
         state["collected"] = collected
         missing = get_missing_fields(collected)

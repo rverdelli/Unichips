@@ -88,7 +88,7 @@ FIELD_PROMPTS = {
     "problem_category": "Che tipo di **problema** hai riscontrato?",
     "lot_code": (
         "Hai il **codice lotto**? Lo trovi sul retro o sul bordo della confezione, "
-        "vicino alla data di scadenza. È una sequenza alfanumerica tipo: L23A45B."
+        "vicino alla data di scadenza. Il formato è **LT seguito da 5 cifre** (es. `LT12345`)."
     ),
     "description": "Puoi descrivermi brevemente **cosa è successo**?",
 }
