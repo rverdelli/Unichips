@@ -109,6 +109,10 @@ thead th {
   font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase;
   letter-spacing: .4px; border-bottom: 1px solid #efefef; white-space: nowrap;
 }
+thead th.sortable { cursor: pointer; user-select: none; }
+thead th.sortable:hover { background: #f0f0f0; color: #555; }
+thead th.sort-asc::after  { content: ' ▲'; color: #D42B2B; }
+thead th.sort-desc::after { content: ' ▼'; color: #D42B2B; }
 tbody tr {
   border-bottom: 1px solid #f5f5f5; cursor: pointer;
   transition: background .12s;
@@ -231,10 +235,12 @@ input[type="date"]:focus { border-color: #D42B2B; }
 }
 .response-editor {
   width: 100%; border: 1.5px solid #e0e0e0; border-radius: 8px; padding: 12px;
-  font-size: 13px; font-family: inherit; line-height: 1.6; resize: vertical;
-  min-height: 170px; outline: none; transition: border-color .2s;
+  font-size: 13px; font-family: inherit; line-height: 1.8; box-sizing: border-box;
+  min-height: 170px; outline: none; transition: border-color .2s; overflow-y: auto;
 }
 .response-editor:focus { border-color: #D42B2B; }
+.response-editor p { margin: 0 0 10px; }
+.response-editor p:last-child { margin-bottom: 0; }
 .modal-actions {
   padding: 16px 24px; border-top: 1px solid #f0f0f0;
   display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
@@ -373,8 +379,15 @@ input[type="date"]:focus { border-color: #D42B2B; }
       <table>
         <thead>
           <tr>
-            <th>ID</th><th>Data</th><th>Cliente</th><th>Prodotto</th>
-            <th>Categoria</th><th>Stato</th><th>Priorità</th><th>Canale</th><th></th>
+            <th class="sortable" data-col="id">ID</th>
+            <th class="sortable" data-col="created_at">Data</th>
+            <th class="sortable" data-col="customer_name">Cliente</th>
+            <th class="sortable" data-col="product">Prodotto</th>
+            <th class="sortable" data-col="problem_category">Categoria</th>
+            <th class="sortable" data-col="status">Stato</th>
+            <th class="sortable" data-col="priority">Priorità</th>
+            <th class="sortable" data-col="channel">Canale</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="complaints-tbody">
@@ -503,6 +516,12 @@ const PAGE_SIZE = 50;
 let totalComplaints = 0;
 let debounceTimer = null;
 let charts = {};
+let sortCol = 'created_at';
+let sortDir = 'desc';
+let lastItems = [];
+
+const PRIO_ORDER = { 'Alta': 0, 'Media': 1, 'Bassa': 2 };
+const STATUS_ORDER = { 'Aperto': 0, 'In lavorazione': 1, 'In attesa cliente': 2, 'Chiuso': 3, 'Chiuso automaticamente': 4 };
 
 const STATUS_BADGE = {
   'Aperto':               'badge-aperto',
@@ -519,11 +538,27 @@ const CH_ICON = { chatbot:'🤖', email:'📧', telefono:'📞', social:'📱' }
 // ════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
   setDefaultDates();
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+      else { sortCol = col; sortDir = col === 'created_at' ? 'desc' : 'asc'; }
+      renderSortHeaders();
+      renderTable(lastItems);
+    });
+  });
   await checkStatus();
   await loadCategories();
   await loadComplaints();
   await loadKpiGestione();
 });
+
+function renderSortHeaders() {
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
 
 function setDefaultDates() {
   const now = new Date();
@@ -608,7 +643,9 @@ async function loadComplaints(page = 0) {
     totalComplaints = d.total;
     document.getElementById('filter-count').textContent =
       d.total + ' reclami trovati';
-    renderTable(d.items);
+    lastItems = d.items;
+    renderSortHeaders();
+    renderTable(lastItems);
     renderPagination(d.total, page);
     loadKpiGestione();
   } catch(e) {
@@ -616,7 +653,21 @@ async function loadComplaints(page = 0) {
   }
 }
 
+function sortItems(items) {
+  return [...items].sort((a, b) => {
+    let va = a[sortCol] ?? '';
+    let vb = b[sortCol] ?? '';
+    if (sortCol === 'priority') { va = PRIO_ORDER[va] ?? 9; vb = PRIO_ORDER[vb] ?? 9; }
+    else if (sortCol === 'status') { va = STATUS_ORDER[va] ?? 9; vb = STATUS_ORDER[vb] ?? 9; }
+    else if (sortCol === 'id') { va = Number(va); vb = Number(vb); }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+}
+
 function renderTable(items) {
+  items = sortItems(items);
   const tbody = document.getElementById('complaints-tbody');
   if (!items.length) {
     tbody.innerHTML = `<tr><td colspan="9">
@@ -761,7 +812,7 @@ async function openModal(id) {
       <div style="font-size:11.5px;color:#aaa;margin-bottom:6px;">
         Modifica il testo prima di inviarlo al cliente
       </div>
-      <textarea class="response-editor" id="modal-response">${esc(c.ai_response||'')}</textarea>
+      <div class="response-editor" id="modal-response" contenteditable="true">${formatAiResponse(c.ai_response||'')}</div>
     </div>`;
 
   document.getElementById('modal-actions').innerHTML = `
@@ -787,8 +838,12 @@ function infoRow(label, val) {
   return `<div class="info-row"><span class="info-label">${label}</span><span class="info-val">${val}</span></div>`;
 }
 
+function getResponseText() {
+  return document.getElementById('modal-response').innerText.trim();
+}
+
 async function sendResponse(id, andClose) {
-  const resp = document.getElementById('modal-response').value;
+  const resp = getResponseText();
   const update = { ai_response: resp };
   if (andClose) update.status = 'Chiuso';
   await fetch(`/admin/api/complaints/${id}`, {
@@ -800,7 +855,7 @@ async function sendResponse(id, andClose) {
 }
 
 async function saveDraft(id) {
-  const resp = document.getElementById('modal-response').value;
+  const resp = getResponseText();
   await fetch(`/admin/api/complaints/${id}`, {
     method:'PATCH', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ai_response: resp})
@@ -1000,6 +1055,24 @@ async function saveConfig() {
 // ════════════════════════════════════════════════════════
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function formatAiResponse(text) {
+  if (!text) return '';
+  // Split into sentences
+  const sentences = text.split(/(?<=\.)\s+/).filter(Boolean);
+  if (sentences.length <= 1) return `<p>${esc(text)}</p>`;
+
+  const parts = [];
+  // First sentence: greeting → bold
+  parts.push(`<p><strong>${esc(sentences[0])}</strong></p>`);
+  // Middle body sentences → grouped into one paragraph
+  if (sentences.length > 2) {
+    parts.push(`<p>${sentences.slice(1, -1).map(esc).join(' ')}</p>`);
+  }
+  // Last sentence: closing → bold italic
+  parts.push(`<p><strong><em>${esc(sentences[sentences.length - 1])}</em></strong></p>`);
+  return parts.join('');
 }
 
 function showToast(msg, isError = false) {
