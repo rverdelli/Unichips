@@ -18,34 +18,14 @@ except ImportError:
     fake = Faker("it_IT")
 
 from modules.database import init_db, DB_PATH
-
-PRODUCTS = [
-    "Più Gusto Vivace", "Più Gusto Lime e Pepe Rosa", "Più Gusto Porchetta",
-    "Più Gusto Tartufo", "Classica", "Rustica", "Veggy Good",
-    "Pop Corn San Carlo", "Wacko's", "Highlander",
-]
-
-CATEGORIES = [
-    "Patatina bruciata", "Patatina verde", "Prodotto sbriciolato",
-    "Gusto anomalo", "Corpo estraneo", "Confezione vuota",
-    "Confezione danneggiata", "Odore anomalo", "Muffa / alterazione", "Altro",
-]
-
-CHANNELS = ["chatbot", "email", "telefono", "social"]
+from modules.constants import PRODUCTS, CATEGORIES, CHANNELS, COMPLEX_CATEGORIES, PRIORITY_MAP
 
 CATEGORY_WEIGHTS = [20, 15, 18, 12, 8, 5, 7, 6, 4, 5]
-
-COMPLEX_CATEGORIES = {"Corpo estraneo", "Confezione vuota", "Odore anomalo", "Muffa / alterazione"}
 
 STATUSES_SIMPLE = ["Chiuso automaticamente"]
 STATUSES_COMPLEX = ["Aperto", "In lavorazione", "In attesa cliente", "Chiuso"]
 STATUS_WEIGHTS_COMPLEX = [30, 25, 15, 30]
 
-PRIORITIES = {"Corpo estraneo": "Alta", "Confezione vuota": "Alta",
-              "Odore anomalo": "Alta", "Muffa / alterazione": "Alta",
-              "Confezione danneggiata": "Media", "Gusto anomalo": "Media",
-              "Patatina bruciata": "Bassa", "Patatina verde": "Bassa",
-              "Prodotto sbriciolato": "Bassa", "Altro": "Bassa"}
 
 DESCRIPTIONS = {
     "Patatina bruciata": [
@@ -164,7 +144,7 @@ def generate_complaints(n=1000):
                 "Eurospin", "Lidl", "Pam", "Auchan", "Bennet", ""
             ]),
             "status": status,
-            "priority": PRIORITIES.get(category, "Normale"),
+            "priority": PRIORITY_MAP.get(category, "Normale"),
             "channel": random.choices(CHANNELS, weights=[40, 30, 20, 10])[0],
             "classification": classification,
             "auto_response": 0 if is_complex else 1,

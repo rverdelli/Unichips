@@ -1,11 +1,14 @@
 """
 Anthropic API layer for CarloBot.
 All three public functions fall back gracefully to mock logic if the API is unavailable.
-Swap the model string in get_client() or chatbot_config.json to upgrade.
+Swap the model string in chatbot_config.json field "model" to upgrade.
 """
 import json
+import logging
 import os
 import re
+
+logger = logging.getLogger(__name__)
 
 try:
     import anthropic
@@ -14,6 +17,7 @@ except ImportError:
     _ANTHROPIC_AVAILABLE = False
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,13 +43,26 @@ def _model(config: dict) -> str:
 
 
 def _parse_json_block(text: str) -> dict:
-    """Extract first JSON object from a string (handles markdown code fences)."""
-    match = re.search(r"\{[\s\S]*\}", text)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
+    """
+    Extract the first well-formed JSON object from a string.
+    Uses a brace-counting scan rather than a greedy regex to handle
+    nested objects correctly.
+    """
+    start = text.find("{")
+    if start == -1:
+        return {}
+    depth = 0
+    for i, ch in enumerate(text[start:], start):
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start: i + 1])
+                except json.JSONDecodeError as e:
+                    logger.warning("JSON parse failed: %s", e)
+                    return {}
     return {}
 
 
@@ -55,25 +72,25 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
     """
     Use Claude to extract structured complaint fields from free-form Italian text.
     Returns only the fields actually found in the message (no inference).
-    Falls back to regex-based extraction on failure.
+    Falls back to regex-based extraction on API failure.
     """
+    from modules.chatbot import _extract_fields_regex  # local import avoids circular at module level
+
     client = _get_client(config)
     if not client:
-        from modules.chatbot import _extract_fields_regex
         return _extract_fields_regex(user_text, already_collected)
 
-    common_knowledge = config.get("common_knowledge", "")
+    from modules.constants import PRODUCTS, CATEGORIES
+
     already_str = json.dumps(already_collected, ensure_ascii=False)
+    common_knowledge = config.get("common_knowledge", "")
 
     system = (
         "Sei un assistente per l'estrazione di informazioni da messaggi di clienti italiani "
         "che segnalano problemi con prodotti snack (patatine San Carlo).\n\n"
         f"Conoscenze di dominio:\n{common_knowledge}\n\n"
-        "Prodotti possibili: Più Gusto Vivace, Più Gusto Lime e Pepe Rosa, Più Gusto Porchetta, "
-        "Più Gusto Tartufo, Classica, Rustica, Veggy Good, Pop Corn San Carlo, Wacko's, Highlander.\n\n"
-        "Categorie problema possibili: Patatina bruciata, Patatina verde, Prodotto sbriciolato, "
-        "Gusto anomalo, Corpo estraneo, Confezione vuota, Confezione danneggiata, Odore anomalo, "
-        "Muffa / alterazione, Altro.\n\n"
+        f"Prodotti possibili: {', '.join(PRODUCTS)}.\n\n"
+        f"Categorie problema possibili: {', '.join(CATEGORIES)}.\n\n"
         "Estrai DAL MESSAGGIO DELL'UTENTE solo le informazioni esplicitamente presenti. "
         "NON inventare o inferire informazioni non menzionate. "
         "Rispondi SOLO con un oggetto JSON valido, senza testo aggiuntivo."
@@ -98,10 +115,9 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
             messages=[{"role": "user", "content": user_prompt}],
         )
         result = _parse_json_block(response.content[0].text)
-        # Merge with already collected, new fields take priority
         return {**already_collected, **{k: v for k, v in result.items() if v}}
-    except Exception:
-        from modules.chatbot import _extract_fields_regex
+    except Exception as e:
+        logger.error("extract_complaint_fields failed: %s", e)
         return _extract_fields_regex(user_text, already_collected)
 
 
@@ -114,17 +130,16 @@ def generate_chat_reply(
     """
     Use Claude to generate a natural conversational reply.
     Returns (reply_text, suggestions_list).
-    Falls back to deterministic logic on failure.
+    Falls back to deterministic logic on API failure.
     """
+    from modules.chatbot import _deterministic_reply  # local import avoids circular at module level
+
     client = _get_client(config)
     if not client:
-        from modules.chatbot import _deterministic_reply
         return _deterministic_reply(user_text, state)
 
     common_knowledge = config.get("common_knowledge", "")
     classification_rules = config.get("classification_rules", "")
-    phase = state.get("phase", "welcome")
-    collected = state.get("collected", {})
 
     system = (
         "Sei CarloBot, l'assistente virtuale di San Carlo / Unichips. "
@@ -138,11 +153,11 @@ def generate_chat_reply(
         "Per domande generiche rispondi con le informazioni disponibili e offri suggerimenti.\n\n"
         "Alla fine della tua risposta, su una riga separata, scrivi SUGGESTIONS: seguito da "
         "una lista JSON di 0-3 suggerimenti brevi per l'utente (stringhe). "
-        "Esempio: SUGGESTIONS: [\"Voglio aprire un reclamo\", \"Dove trovo il lotto?\"]"
+        'Esempio: SUGGESTIONS: ["Voglio aprire un reclamo", "Dove trovo il lotto?"]'
     )
 
     messages = []
-    for msg in conversation_history[-10:]:  # last 10 messages for context
+    for msg in conversation_history[-10:]:
         role = "assistant" if msg["role"] == "bot" else "user"
         messages.append({"role": role, "content": msg["text"]})
     messages.append({"role": "user", "content": user_text})
@@ -156,25 +171,28 @@ def generate_chat_reply(
         )
         full_text = response.content[0].text
 
-        # Parse suggestions from the special marker
-        suggestions = []
+        suggestions: list[str] = []
         if "SUGGESTIONS:" in full_text:
             parts = full_text.split("SUGGESTIONS:", 1)
             reply_text = parts[0].strip()
             sug_raw = parts[1].strip()
-            try:
-                suggestions = json.loads(sug_raw)
-                if not isinstance(suggestions, list):
+            # Find JSON array
+            arr_match = re.search(r"\[.*?\]", sug_raw, re.DOTALL)
+            if arr_match:
+                try:
+                    suggestions = json.loads(arr_match.group(0))
+                    if not isinstance(suggestions, list):
+                        suggestions = []
+                except json.JSONDecodeError as e:
+                    logger.warning("Suggestions parse failed: %s", e)
                     suggestions = []
-            except json.JSONDecodeError:
-                suggestions = []
         else:
             reply_text = full_text.strip()
 
         return reply_text, suggestions
 
-    except Exception:
-        from modules.chatbot import _deterministic_reply
+    except Exception as e:
+        logger.error("generate_chat_reply failed: %s", e)
         return _deterministic_reply(user_text, state)
 
 
@@ -182,11 +200,12 @@ def classify_and_respond(collected_data: dict, config: dict) -> dict:
     """
     Use Claude to classify the complaint and generate a personalized customer response.
     Returns dict with: classification, status, priority, auto_response, ai_response.
-    Falls back to keyword-based classifier on failure.
+    Falls back to keyword-based classifier on API failure.
     """
+    from modules.classifier import _classify_mock  # local import avoids circular at module level
+
     client = _get_client(config)
     if not client:
-        from modules.classifier import _classify_mock
         return _classify_mock(
             collected_data.get("problem_category", ""),
             collected_data.get("description", ""),
@@ -212,40 +231,38 @@ def classify_and_respond(collected_data: dict, config: dict) -> dict:
     )
 
     complaint_str = "\n".join(
-        f"- {k}: {v}" for k, v in collected_data.items() if v and k != "channel"
+        f"- {k}: {v}" for k, v in collected_data.items() if v and k not in ("channel", "has_photo")
     )
-
-    user_prompt = f"Dati del reclamo:\n{complaint_str}\n\nClassifica e genera la risposta."
 
     try:
         response = client.messages.create(
             model=_model(config),
             max_tokens=800,
             system=system,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[{"role": "user", "content": f"Dati del reclamo:\n{complaint_str}\n\nClassifica e genera la risposta."}],
         )
         result = _parse_json_block(response.content[0].text)
 
-        # Validate and normalise
         classification = result.get("classification", "semplice")
         if classification not in ("semplice", "complesso"):
             classification = "semplice"
 
-        status_map = {"semplice": "Chiuso automaticamente", "complesso": "Aperto"}
         priority = result.get("priority", "Bassa")
         if priority not in ("Alta", "Media", "Bassa"):
             priority = "Bassa"
 
+        status_default = "Chiuso automaticamente" if classification == "semplice" else "Aperto"
+
         return {
             "classification": classification,
-            "status": result.get("status", status_map[classification]),
+            "status": result.get("status", status_default),
             "priority": priority,
             "auto_response": result.get("auto_response", classification == "semplice"),
             "ai_response": result.get("ai_response", ""),
         }
 
-    except Exception:
-        from modules.classifier import _classify_mock
+    except Exception as e:
+        logger.error("classify_and_respond failed: %s", e)
         return _classify_mock(
             collected_data.get("problem_category", ""),
             collected_data.get("description", ""),

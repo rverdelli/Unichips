@@ -1,8 +1,11 @@
 import sqlite3
 import json
-import os
-from datetime import datetime
+import logging
 from pathlib import Path
+
+from modules.constants import COMPLAINT_UPDATABLE_COLUMNS
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "complaints.db"
 CONFIG_PATH = Path(__file__).parent.parent / "data" / "chatbot_config.json"
@@ -50,6 +53,11 @@ def init_db():
             has_photo INTEGER DEFAULT 0
         )
     """)
+    # Indexes on columns used in filters and analytics
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON complaints(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_category ON complaints(problem_category)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_created ON complaints(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_channel ON complaints(channel)")
     conn.commit()
     conn.close()
 
@@ -109,6 +117,10 @@ def get_complaint_by_id(complaint_id):
 
 
 def update_complaint(complaint_id, data):
+    # Whitelist columns to prevent injection via dynamic key construction
+    invalid = set(data.keys()) - COMPLAINT_UPDATABLE_COLUMNS
+    if invalid:
+        raise ValueError(f"Attempted to update non-whitelisted columns: {invalid}")
     conn = get_connection()
     set_clauses = [f"{k} = ?" for k in data]
     params = list(data.values()) + [complaint_id]

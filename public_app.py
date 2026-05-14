@@ -1,4 +1,3 @@
-import os
 import streamlit as st
 from modules.database import init_db, get_chatbot_config, save_chatbot_config
 from modules.chatbot import init_state, process_message
@@ -13,11 +12,9 @@ st.set_page_config(
 
 init_db()
 
-# ── API Key bootstrap ────────────────────────────────────────────────────────
-# Allow passing key via URL query param ?apikey=... for demo convenience
-_qp = st.query_params.get("apikey", "")
-if _qp and not os.environ.get("ANTHROPIC_API_KEY"):
-    os.environ["ANTHROPIC_API_KEY"] = _qp
+# ── Logging setup ────────────────────────────────────────────────────────────
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 # ── Session state ────────────────────────────────────────────────────────────
 if "chat_open" not in st.session_state:

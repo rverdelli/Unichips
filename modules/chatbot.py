@@ -2,64 +2,38 @@
 Chatbot conversation logic (state machine).
 LLM calls are delegated to modules/llm.py — swap API key to go live.
 """
+import logging
 import re
+
 from modules.database import save_complaint, get_chatbot_config
+from modules.constants import (
+    REQUIRED_COMPLAINT_FIELDS, FIELD_LABELS, FIELD_PROMPTS,
+    PRODUCTS, CATEGORIES, COMPLAINT_INTENT_KEYWORDS,
+)
 
-REQUIRED_FIELDS = ["name", "email", "product", "problem_category", "lot_code", "description"]
+logger = logging.getLogger(__name__)
 
-FIELD_LABELS = {
-    "name": "Nome e cognome",
-    "email": "Email di contatto",
-    "product": "Prodotto acquistato",
-    "problem_category": "Tipo di problema",
-    "lot_code": "Codice lotto",
-    "description": "Descrizione dell'accaduto",
-}
-
-FIELD_PROMPTS = {
-    "name": "Puoi dirmi il tuo **nome e cognome**?",
-    "email": "Qual è il tuo **indirizzo email** di contatto?",
-    "product": "Qual è il **prodotto** che hai acquistato? (es. Più Gusto Classica, Veggy Good, ecc.)",
-    "problem_category": "Che tipo di **problema** hai riscontrato?",
-    "lot_code": (
-        "Hai il **codice lotto**? Lo trovi sul retro o sul bordo della confezione, "
-        "vicino alla data di scadenza. È una sequenza alfanumerica tipo: L23A45B."
-    ),
-    "description": "Puoi descrivermi brevemente **cosa è successo**?",
-}
-
-PRODUCTS = [
-    "Più Gusto Vivace", "Più Gusto Lime e Pepe Rosa", "Più Gusto Porchetta",
-    "Più Gusto Tartufo", "Classica", "Rustica", "Veggy Good",
-    "Pop Corn San Carlo", "Wacko's", "Highlander",
-]
-
-CATEGORIES = [
-    "Patatina bruciata", "Patatina verde", "Prodotto sbriciolato",
-    "Gusto anomalo", "Corpo estraneo", "Confezione vuota",
-    "Confezione danneggiata", "Odore anomalo", "Muffa / alterazione", "Altro",
-]
+MAX_FIELD_LENGTH = 1000  # Guard against absurdly long inputs
 
 
 # ── State helpers ────────────────────────────────────────────────────────────
 
-def init_state():
+def init_state() -> dict:
     return {
         "phase": "welcome",
         "collected": {},
-        "messages": [],
         "complaint_id": None,
         "waiting_for": None,
     }
 
 
-def get_missing_fields(collected):
-    return [f for f in REQUIRED_FIELDS if not collected.get(f)]
+def get_missing_fields(collected: dict) -> list[str]:
+    return [f for f in REQUIRED_COMPLAINT_FIELDS if not collected.get(f)]
 
 
-def build_summary(collected):
+def build_summary(collected: dict) -> str:
     lines = []
-    for field in REQUIRED_FIELDS:
+    for field in REQUIRED_COMPLAINT_FIELDS:
         val = collected.get(field)
         if val:
             lines.append(f"- **{FIELD_LABELS[field]}**: {val}")
@@ -71,11 +45,11 @@ def build_summary(collected):
 def _extract_fields_regex(text: str, collected: dict) -> dict:
     updated = dict(collected)
 
-    email_match = re.search(r"[\w.\-+]+@[\w.\-]+\.\w+", text)
+    email_match = re.search(r"[\w.\-+]+@[\w.\-]+\.[a-zA-Z]{2,}", text)
     if email_match and not updated.get("email"):
         updated["email"] = email_match.group(0)
 
-    # Lot code: must contain at least one digit (avoids matching common words like "lotto")
+    # Lot code: must start with L followed immediately by a digit, or dd-letter-dd pattern
     lot_match = re.search(r"\b[Ll]\d[0-9A-Za-z]{3,10}\b|\b\d{2}[A-Za-z]\d{2,8}\b", text)
     if lot_match and not updated.get("lot_code"):
         updated["lot_code"] = lot_match.group(0).upper()
@@ -110,7 +84,7 @@ def _extract_fields_regex(text: str, collected: dict) -> dict:
 
 # ── Fallback: deterministic reply (used when API unavailable) ────────────────
 
-def _deterministic_reply(user_text: str, state: dict) -> tuple:
+def _deterministic_reply(user_text: str, state: dict) -> tuple[str, list]:
     text_lower = user_text.lower()
     if "reclamo" in text_lower or "segnalazione" in text_lower or "problema" in text_lower:
         return (
@@ -139,7 +113,11 @@ def _deterministic_reply(user_text: str, state: dict) -> tuple:
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
-def process_message(user_text: str, state: dict, conversation_history: list = None):
+def process_message(
+    user_text: str,
+    state: dict,
+    conversation_history: list | None = None,
+) -> tuple[str, dict, list]:
     """
     Main chatbot logic. Returns (bot_reply, updated_state, suggestions).
     Uses LLM when configured, falls back to deterministic logic otherwise.
@@ -149,17 +127,12 @@ def process_message(user_text: str, state: dict, conversation_history: list = No
     config = get_chatbot_config()
     phase = state.get("phase", "welcome")
     collected = state.get("collected", {})
-    suggestions = []
+    suggestions: list[str] = []
 
     # ── WELCOME ──────────────────────────────────────────────────────────────
     if phase == "welcome":
         text_lower = user_text.lower()
-
-        # Detect complaint intent to transition phase immediately
-        complaint_intent = any(w in text_lower for w in [
-            "reclamo", "segnalazione", "problema", "rotto", "bruciata",
-            "corpo estraneo", "vuota", "muffa", "odore", "segnalare",
-        ])
+        complaint_intent = any(w in text_lower for w in COMPLAINT_INTENT_KEYWORDS)
 
         if complaint_intent:
             state["phase"] = "collecting"
@@ -181,7 +154,6 @@ def process_message(user_text: str, state: dict, conversation_history: list = No
             )
             return reply, state, []
 
-        # For generic questions use LLM if available, else fallback
         if llm.is_configured(config):
             hist = conversation_history or []
             reply, suggestions = llm.generate_chat_reply(user_text, hist, state, config)
@@ -192,59 +164,55 @@ def process_message(user_text: str, state: dict, conversation_history: list = No
 
     # ── COLLECTING ───────────────────────────────────────────────────────────
     if phase == "collecting":
-        # Extract fields from user message
         if llm.is_configured(config):
             collected = llm.extract_complaint_fields(user_text, collected, config)
         else:
             collected = _extract_fields_regex(user_text, collected)
 
-        # If we were waiting for a specific field and it's still empty, assign raw text
+        # If we were waiting for a specific field and it's still missing, use raw input
         wf = state.get("waiting_for")
         if wf and not collected.get(wf):
-            collected[wf] = user_text.strip()
+            collected[wf] = user_text.strip()[:MAX_FIELD_LENGTH]
 
         state["collected"] = collected
         missing = get_missing_fields(collected)
 
         if not missing:
-            # All mandatory fields collected — classify and save
             from modules.classifier import classify_complaint
             result = classify_complaint(collected, config)
             complaint_data = {**collected, **result, "channel": "chatbot"}
             complaint_id = save_complaint(complaint_data)
             state["complaint_id"] = complaint_id
             state["phase"] = "done"
-            state["classification"] = result["classification"]
 
             summary = build_summary(collected)
+            ai_resp = result.get("ai_response", "")
+            is_simple = result["classification"] == "semplice"
 
-            if result["classification"] == "semplice":
+            base = f"✅ **Segnalazione #{complaint_id} registrata.**\n\n"
+            base += f"Riepilogo informazioni ricevute:\n{summary}\n\n---\n"
+
+            if ai_resp:
+                reply = base + ai_resp
+            elif is_simple:
                 reply = (
-                    f"✅ **Segnalazione #{complaint_id} registrata.**\n\n"
-                    f"Riepilogo informazioni ricevute:\n{summary}\n\n"
-                    "---\n"
-                    + result.get("ai_response", (
-                        "La tua segnalazione è stata registrata e sarà utilizzata "
-                        "per monitorare la qualità dei nostri prodotti."
-                    ))
-                    + "\n\nRiceverai una email di conferma all'indirizzo indicato."
+                    base
+                    + "La tua segnalazione è stata registrata e sarà utilizzata "
+                    "per monitorare la qualità dei nostri prodotti.\n\n"
+                    "Riceverai una email di conferma all'indirizzo indicato."
                 )
             else:
                 reply = (
-                    f"✅ **Segnalazione #{complaint_id} registrata.**\n\n"
-                    f"Riepilogo informazioni ricevute:\n{summary}\n\n"
-                    "---\n"
-                    + result.get("ai_response", (
-                        "Il reclamo sarà preso in carico dal nostro team qualità. "
-                        "Riceverai un aggiornamento via email entro 2-3 giorni lavorativi."
-                    ))
+                    base
+                    + "Il reclamo sarà preso in carico dal nostro team qualità. "
+                    "Riceverai un aggiornamento via email entro 2-3 giorni lavorativi."
                 )
             suggestions = ["Grazie!", "Aprire un altro reclamo"]
 
         else:
             next_field = missing[0]
             state["waiting_for"] = next_field
-            already = [f for f in REQUIRED_FIELDS if collected.get(f)]
+            already = [f for f in REQUIRED_COMPLAINT_FIELDS if collected.get(f)]
             if already:
                 summary = build_summary(collected)
                 reply = (

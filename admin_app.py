@@ -414,7 +414,8 @@ with tab1:
                 avg_days = round(closed["days"].mean(), 1)
             else:
                 avg_days = "—"
-            top_cat = df_all["problem_category"].mode()[0] if not df_all.empty else "—"
+            _mode = df_all["problem_category"].mode()
+            top_cat = _mode.iloc[0] if not _mode.empty else "—"
         else:
             total = open_c = auto_c = pending = 0
             avg_days = "—"
@@ -560,7 +561,8 @@ with tab2:
             pending = len(dff[dff["status"].isin(["Aperto", "In lavorazione"])])
             closed_df = dff[dff["closed_at"].notna()].copy()
             avg_days = round((closed_df["closed_at"] - closed_df["created_at"]).dt.days.mean(), 1) if not closed_df.empty else "—"
-            top_cat = dff["problem_category"].mode()[0]
+            _mode2 = dff["problem_category"].mode()
+            top_cat = _mode2.iloc[0] if not _mode2.empty else "—"
 
             with col_k1:
                 st.markdown(f'<div class="kpi-card"><div class="kpi-value">{total}</div><div class="kpi-label">Totale reclami</div></div>', unsafe_allow_html=True)

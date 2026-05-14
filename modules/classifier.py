@@ -2,6 +2,11 @@
 Complaint classification.
 classify_complaint() delegates to LLM when configured; falls back to _classify_mock().
 """
+import logging
+
+from modules.constants import COMPLEX_CATEGORIES, PRIORITY_MAP
+
+logger = logging.getLogger(__name__)
 
 SIMPLE_KEYWORDS = [
     "bruciata", "bruciate", "scura", "scure", "verde", "verdi",
@@ -16,31 +21,18 @@ COMPLEX_KEYWORDS = [
     "alterato", "alterata", "sicurezza", "metallo", "plastica", "vetro",
 ]
 
-PRIORITY_MAP = {
-    "Corpo estraneo": "Alta",
-    "Confezione vuota": "Alta",
-    "Odore anomalo": "Alta",
-    "Muffa / alterazione": "Alta",
-    "Confezione danneggiata": "Media",
-    "Gusto anomalo": "Media",
-    "Patatina bruciata": "Bassa",
-    "Patatina verde": "Bassa",
-    "Prodotto sbriciolato": "Bassa",
-    "Altro": "Bassa",
-}
 
-COMPLEX_CATEGORIES = {"Corpo estraneo", "Confezione vuota", "Odore anomalo", "Muffa / alterazione"}
-
-
-def classify_complaint(collected_data: dict, config: dict = None) -> dict:
+def classify_complaint(collected_data: dict | str, config: dict | str = None) -> dict:
     """
     Classify a complaint using LLM when configured, mock otherwise.
-    Accepts either (collected_dict, config) for new LLM path
-    or (problem_category_str, description_str) for legacy direct calls.
+
+    Accepts two calling conventions:
+    - classify_complaint(collected_dict, config_dict)  — standard path from chatbot
+    - classify_complaint(category_str, description_str) — legacy path from init_data.py
     """
     from modules import llm as llm_module
 
-    # Support legacy calls from init_data.py: classify_complaint(category, description)
+    # Legacy call: classify_complaint("Categoria", "descrizione")
     if isinstance(collected_data, str):
         category = collected_data
         description = config if isinstance(config, str) else ""
@@ -60,29 +52,28 @@ def _classify_mock(problem_category: str, description: str) -> dict:
     """Keyword-based fallback classifier — no API needed."""
     text = (problem_category + " " + description).lower()
 
-    is_complex = any(kw in text for kw in COMPLEX_KEYWORDS)
-
-    if problem_category in COMPLEX_CATEGORIES:
-        is_complex = True
+    is_complex = (
+        any(kw in text for kw in COMPLEX_KEYWORDS)
+        or problem_category in COMPLEX_CATEGORIES
+    )
 
     classification = "complesso" if is_complex else "semplice"
     priority = PRIORITY_MAP.get(problem_category, "Bassa")
 
     if classification == "semplice":
-        status = "Chiuso automaticamente"
-        auto_response = True
-        ai_response = _generate_auto_response(problem_category)
-    else:
-        status = "Aperto"
-        auto_response = False
-        ai_response = _generate_complex_response(problem_category)
-
+        return {
+            "classification": "semplice",
+            "status": "Chiuso automaticamente",
+            "priority": priority,
+            "auto_response": True,
+            "ai_response": _generate_auto_response(problem_category),
+        }
     return {
-        "classification": classification,
-        "status": status,
+        "classification": "complesso",
+        "status": "Aperto",
         "priority": priority,
-        "auto_response": auto_response,
-        "ai_response": ai_response,
+        "auto_response": False,
+        "ai_response": _generate_complex_response(problem_category),
     }
 
 
@@ -115,12 +106,26 @@ def _generate_auto_response(category: str) -> str:
             "La sua segnalazione è stata registrata.\n\n"
             "Cordiali saluti,\nTeam Qualità San Carlo"
         ),
+        "Gusto anomalo": (
+            "Gentile Cliente,\n\n"
+            "la ringraziamo per la sua segnalazione relativa a un gusto anomalo. "
+            "Lievi variazioni organolettiche possono occasionalmente verificarsi per via "
+            "delle caratteristiche naturali delle materie prime. "
+            "La sua segnalazione è stata registrata e sarà analizzata dal nostro team.\n\n"
+            "Cordiali saluti,\nTeam Qualità San Carlo"
+        ),
+        "Confezione danneggiata": (
+            "Gentile Cliente,\n\n"
+            "la ringraziamo per la sua segnalazione. La confezione potrebbe essere stata "
+            "danneggiata durante il trasporto o la distribuzione. "
+            "La sua segnalazione è stata registrata.\n\n"
+            "Cordiali saluti,\nTeam Qualità San Carlo"
+        ),
     }
     return responses.get(category, (
         "Gentile Cliente,\n\n"
-        "la ringraziamo per la sua segnalazione. In alcuni casi possono verificarsi leggere "
-        "differenze dovute alle caratteristiche naturali delle materie prime e al processo produttivo. "
-        "La sua segnalazione è stata registrata e sarà utilizzata per monitorare la qualità.\n\n"
+        "la ringraziamo per la sua segnalazione. La sua segnalazione è stata registrata "
+        "e sarà utilizzata per monitorare la qualità dei nostri prodotti.\n\n"
         "Cordiali saluti,\nTeam Qualità San Carlo"
     ))
 
