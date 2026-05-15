@@ -1,6 +1,7 @@
 """
 FastAPI backend — pagina pubblica + API chatbot + dashboard admin.
 """
+import io
 import sqlite3
 import threading
 import logging
@@ -9,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from modules.database import (
@@ -278,6 +279,83 @@ async def admin_stats(
         "unique_products": sorted(set(r.get("product","") for r in get_stats() if r.get("product"))),
         "unique_categories": sorted(set(r.get("problem_category","") for r in get_stats() if r.get("problem_category"))),
     }
+
+
+@app.get("/admin/api/export")
+async def admin_export():
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("""
+        SELECT id, created_at, customer_name, customer_email, product, problem_category,
+               lot_code, expiry_date, purchase_location, description,
+               status, priority, classification, auto_response, ai_response,
+               closed_at, has_photo
+        FROM complaints ORDER BY id DESC
+    """).fetchall()
+    conn.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Reclami"
+
+    headers = [
+        "ID", "Data apertura", "Nome cliente", "Email", "Prodotto",
+        "Categoria problema", "Codice lotto", "Data scadenza", "Punto vendita",
+        "Descrizione", "Stato", "Priorità", "Classificazione", "Risposta automatica",
+        "Risposta inviata", "Data chiusura", "Foto allegata",
+    ]
+
+    header_fill = PatternFill("solid", fgColor="C0272D")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    col_widths = [6, 18, 22, 28, 20, 22, 12, 14, 22, 50, 18, 10, 14, 18, 60, 18, 14]
+    for col, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
+
+    for r, row in enumerate(rows, 2):
+        ws.cell(r, 1, row["id"])
+        ws.cell(r, 2, row["created_at"])
+        ws.cell(r, 3, row["customer_name"])
+        ws.cell(r, 4, row["customer_email"])
+        ws.cell(r, 5, row["product"])
+        ws.cell(r, 6, row["problem_category"])
+        ws.cell(r, 7, row["lot_code"])
+        ws.cell(r, 8, row["expiry_date"])
+        ws.cell(r, 9, row["purchase_location"])
+        ws.cell(r, 10, row["description"])
+        ws.cell(r, 11, row["status"])
+        ws.cell(r, 12, row["priority"])
+        ws.cell(r, 13, row["classification"])
+        ws.cell(r, 14, "Sì" if row["auto_response"] else "No")
+        ws.cell(r, 15, row["ai_response"])
+        ws.cell(r, 16, row["closed_at"])
+        ws.cell(r, 17, "Sì" if row["has_photo"] else "No")
+        # Wrap text in description and ai_response columns
+        for col in (10, 15):
+            ws.cell(r, col).alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"reclami_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.get("/admin/api/config")

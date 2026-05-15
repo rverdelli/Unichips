@@ -96,7 +96,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
   transition: all .15s;
 }
 .btn-reset:hover { border-color: #D42B2B; color: #D42B2B; }
-.filter-count { margin-left: auto; font-size: 12.5px; color: #aaa; }
+.filter-count { font-size: 12.5px; color: #aaa; }
+.btn-export {
+  margin-left: auto; background: #217346; color: #fff;
+  border: none; border-radius: 8px; padding: 7px 14px;
+  font-size: 13px; cursor: pointer; transition: background .15s;
+}
+.btn-export:hover { background: #185c37; }
 
 /* ── Table ── */
 .table-wrap {
@@ -367,6 +373,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
              oninput="debounceLoad()">
       <button class="btn-reset" onclick="resetFilters()">✕ Reset</button>
       <span class="filter-count" id="filter-count"></span>
+      <button class="btn-export" onclick="exportExcel()" title="Esporta tutti i record in Excel">📥 Esporta Excel</button>
     </div>
 
     <!-- Table -->
@@ -1071,6 +1078,10 @@ function formatAiResponse(text) {
     body ? `<p>${body}</p>` : '',
     `<p>${esc(closing)}</p>`,
   ].filter(Boolean).join('<br>');
+}
+
+function exportExcel() {
+  window.location.href = '/admin/api/export';
 }
 
 function showToast(msg, isError = false) {
