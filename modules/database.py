@@ -3,7 +3,7 @@ import json
 import logging
 from pathlib import Path
 
-from modules.constants import COMPLAINT_UPDATABLE_COLUMNS
+from modules.constants import COMPLAINT_UPDATABLE_COLUMNS, DEFAULT_CLUSTERS
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,58 @@ def get_connection():
     return conn
 
 
+def _migrate_db(conn):
+    """Add new columns to existing DB without recreating it."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(complaints)").fetchall()}
+    added = False
+    for col, definition in [
+        ("cluster1", "TEXT DEFAULT ''"),
+        ("cluster2", "TEXT DEFAULT ''"),
+        ("gravity",  "TEXT DEFAULT ''"),
+    ]:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {definition}")
+            added = True
+    if "gravity" not in existing and "priority" in existing:
+        conn.execute("UPDATE complaints SET gravity = priority WHERE gravity IS NULL OR gravity = ''")
+    if added:
+        conn.commit()
+    # Backfill cluster1/cluster2 for rows that have none yet
+    _backfill_clusters(conn)
+
+
+_CATEGORY_TO_CLUSTER = {
+    "Patatina bruciata":     ("ORGANOLETTICO",        "DIFETTI VISIVI"),
+    "Patatina verde":        ("ORGANOLETTICO",        "DIFETTI VISIVI"),
+    "Prodotto sbriciolato":  ("DIFETTI DI PACKAGING", "ROTTURE/INTRINSECHE DI PRODOTTO"),
+    "Gusto anomalo":         ("ORGANOLETTICO",        "GUSTO ANOMALO"),
+    "Corpo estraneo":        ("CORPO ESTRANEO",       "VARI"),
+    "Confezione vuota":      ("DIFETTI DI PACKAGING", "CARTONI VUOTI"),
+    "Confezione danneggiata":("DIFETTI DI PACKAGING", "SALDATURE APERTE"),
+    "Odore anomalo":         ("ORGANOLETTICO",        "CATTIVO SAPORE / ODORE / CONSISTENZA DA PACK-GADGET"),
+    "Muffa / alterazione":   ("MICROBIOLOGICO",       "MUFFA"),
+    "Altro":                 ("ORGANOLETTICO",        "GUSTO NON GRADITO"),
+}
+
+
+def _backfill_clusters(conn):
+    """Populate cluster1/cluster2 for rows that have none (existing mock data)."""
+    rows = conn.execute(
+        "SELECT id, problem_category FROM complaints WHERE cluster1 IS NULL OR cluster1 = ''"
+    ).fetchall()
+    if not rows:
+        return
+    updates = []
+    for row in rows:
+        cat = row[1] or "Altro"
+        c1, c2 = _CATEGORY_TO_CLUSTER.get(cat, ("ORGANOLETTICO", "GUSTO NON GRADITO"))
+        updates.append((c1, c2, row[0]))
+    conn.executemany(
+        "UPDATE complaints SET cluster1 = ?, cluster2 = ? WHERE id = ?", updates
+    )
+    conn.commit()
+
+
 def init_db():
     conn = get_connection()
     conn.execute("""
@@ -44,40 +96,47 @@ def init_db():
             expiry_date TEXT,
             purchase_location TEXT,
             status TEXT DEFAULT 'Aperto',
-            priority TEXT DEFAULT 'Normale',
+            priority TEXT DEFAULT 'Media',
             channel TEXT DEFAULT 'chatbot',
             classification TEXT,
             auto_response INTEGER DEFAULT 0,
             ai_response TEXT,
             closed_at TEXT,
-            has_photo INTEGER DEFAULT 0
+            has_photo INTEGER DEFAULT 0,
+            cluster1 TEXT DEFAULT '',
+            cluster2 TEXT DEFAULT '',
+            gravity TEXT DEFAULT ''
         )
     """)
-    # Indexes on columns used in filters and analytics
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_status ON complaints(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_status   ON complaints(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_category ON complaints(problem_category)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_created ON complaints(created_at)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_channel ON complaints(channel)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_created  ON complaints(created_at)")
+    conn.commit()
+    _migrate_db(conn)
+    # Index on cluster1 only after migration ensures the column exists
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cluster1 ON complaints(cluster1)")
     conn.commit()
     conn.close()
 
 
 def save_complaint(data):
+    gravity = data.get("gravity") or data.get("priority") or "Media"
     conn = get_connection()
     cursor = conn.execute("""
         INSERT INTO complaints
         (customer_name, customer_email, product, problem_category, description,
          lot_code, expiry_date, purchase_location, status, priority, channel,
-         classification, auto_response, ai_response, has_photo)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         classification, auto_response, ai_response, has_photo, cluster1, cluster2, gravity)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         data.get("name"), data.get("email"), data.get("product"),
         data.get("problem_category"), data.get("description"),
         data.get("lot_code", ""), data.get("expiry_date", ""),
         data.get("purchase_location", ""), data.get("status", "Aperto"),
-        data.get("priority", "Normale"), data.get("channel", "chatbot"),
+        gravity, data.get("channel", "chatbot"),
         data.get("classification"), 1 if data.get("auto_response") else 0,
         data.get("ai_response", ""), 1 if data.get("has_photo") else 0,
+        data.get("cluster1", ""), data.get("cluster2", ""), gravity,
     ))
     complaint_id = cursor.lastrowid
     conn.commit()
@@ -114,7 +173,6 @@ def get_complaint_by_id(complaint_id):
 
 
 def update_complaint(complaint_id, data):
-    # Whitelist columns to prevent injection via dynamic key construction
     invalid = set(data.keys()) - COMPLAINT_UPDATABLE_COLUMNS
     if invalid:
         raise ValueError(f"Attempted to update non-whitelisted columns: {invalid}")
@@ -128,11 +186,14 @@ def update_complaint(complaint_id, data):
 
 def get_chatbot_config():
     if CONFIG_PATH.exists():
-        with open(CONFIG_PATH, encoding="utf-8") as f:
-            return json.load(f)
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        if "clusters" not in cfg:
+            cfg["clusters"] = DEFAULT_CLUSTERS
+        return cfg
     return {
         "common_knowledge": DEFAULT_COMMON_KNOWLEDGE,
         "classification_rules": DEFAULT_CLASSIFICATION_RULES,
+        "clusters": DEFAULT_CLUSTERS,
     }
 
 

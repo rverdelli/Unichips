@@ -1,6 +1,7 @@
 """
-Complaint classification.
+Complaint classification and cluster assignment.
 classify_complaint() delegates to LLM when configured; falls back to _classify_mock().
+assign_clusters() assigns cluster1/cluster2/gravity from the config cluster table.
 """
 import logging
 
@@ -21,6 +22,20 @@ COMPLEX_KEYWORDS = [
     "alterato", "alterata", "sicurezza", "metallo", "plastica", "vetro",
 ]
 
+# Fallback mapping from old categories to cluster1/cluster2
+_CATEGORY_TO_CLUSTER = {
+    "Patatina bruciata":     ("ORGANOLETTICO",         "DIFETTI VISIVI"),
+    "Patatina verde":        ("ORGANOLETTICO",         "DIFETTI VISIVI"),
+    "Prodotto sbriciolato":  ("DIFETTI DI PACKAGING",  "ROTTURE/INTRINSECHE DI PRODOTTO"),
+    "Gusto anomalo":         ("ORGANOLETTICO",         "GUSTO ANOMALO"),
+    "Corpo estraneo":        ("CORPO ESTRANEO",        "VARI"),
+    "Confezione vuota":      ("DIFETTI DI PACKAGING",  "CARTONI VUOTI"),
+    "Confezione danneggiata":("DIFETTI DI PACKAGING",  "SALDATURE APERTE"),
+    "Odore anomalo":         ("ORGANOLETTICO",         "CATTIVO SAPORE / ODORE / CONSISTENZA DA PACK-GADGET"),
+    "Muffa / alterazione":   ("MICROBIOLOGICO",        "MUFFA"),
+    "Altro":                 ("ORGANOLETTICO",         "GUSTO NON GRADITO"),
+}
+
 
 def classify_complaint(collected_data: dict | str, config: dict | str = None) -> dict:
     """
@@ -32,7 +47,6 @@ def classify_complaint(collected_data: dict | str, config: dict | str = None) ->
     """
     from modules import llm as llm_module
 
-    # Legacy call: classify_complaint("Categoria", "descrizione")
     if isinstance(collected_data, str):
         category = collected_data
         description = config if isinstance(config, str) else ""
@@ -46,6 +60,45 @@ def classify_complaint(collected_data: dict | str, config: dict | str = None) ->
         collected_data.get("problem_category", ""),
         collected_data.get("description", ""),
     )
+
+
+def assign_clusters(collected: dict, config: dict) -> dict:
+    """
+    Assign cluster1, cluster2, gravity to a complaint.
+    Uses LLM when configured; falls back to category-keyword mapping.
+    Returns a dict with keys cluster1, cluster2, gravity.
+    """
+    from modules import llm as llm_module
+
+    clusters = config.get("clusters") or []
+
+    if llm_module.is_configured(config) and clusters:
+        try:
+            result = llm_module.assign_clusters(collected, clusters, config)
+            if result.get("cluster1") and result.get("cluster2"):
+                return result
+        except Exception as e:
+            logger.warning("LLM cluster assignment failed, using fallback: %s", e)
+
+    return _mock_assign_clusters(collected, clusters)
+
+
+def _mock_assign_clusters(collected: dict, clusters: list) -> dict:
+    """Keyword-based cluster assignment — no API needed."""
+    category = collected.get("problem_category", "Altro")
+    cluster1, cluster2 = _CATEGORY_TO_CLUSTER.get(category, ("ORGANOLETTICO", "GUSTO NON GRADITO"))
+
+    # Find gravity from the cluster table
+    gravity = None
+    for c in clusters:
+        if c.get("cluster1") == cluster1 and c.get("cluster2") == cluster2:
+            gravity = c.get("gravity")
+            break
+
+    if gravity is None:
+        gravity = PRIORITY_MAP.get(category, "Media")
+
+    return {"cluster1": cluster1, "cluster2": cluster2, "gravity": gravity}
 
 
 def _classify_mock(problem_category: str, description: str) -> dict:
@@ -65,6 +118,7 @@ def _classify_mock(problem_category: str, description: str) -> dict:
             "classification": "semplice",
             "status": "Chiuso automaticamente",
             "priority": priority,
+            "gravity": priority,
             "auto_response": True,
             "ai_response": _generate_auto_response(problem_category),
         }
@@ -72,6 +126,7 @@ def _classify_mock(problem_category: str, description: str) -> dict:
         "classification": "complesso",
         "status": "Aperto",
         "priority": priority,
+        "gravity": priority,
         "auto_response": False,
         "ai_response": _generate_complex_response(problem_category),
     }

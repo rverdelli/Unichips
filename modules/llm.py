@@ -261,16 +261,17 @@ def classify_and_respond(collected_data: dict, config: dict) -> dict:
         if classification not in ("semplice", "complesso"):
             classification = "semplice"
 
-        priority = result.get("priority", "Bassa")
-        if priority not in ("Alta", "Media", "Bassa"):
-            priority = "Bassa"
+        gravity = result.get("priority", "Media")
+        if gravity not in ("Alta", "Media", "Bassa"):
+            gravity = "Media"
 
         status_default = "Chiuso automaticamente" if classification == "semplice" else "Aperto"
 
         return {
             "classification": classification,
             "status": result.get("status", status_default),
-            "priority": priority,
+            "priority": gravity,
+            "gravity": gravity,
             "auto_response": result.get("auto_response", classification == "semplice"),
             "ai_response": result.get("ai_response", ""),
         }
@@ -281,6 +282,65 @@ def classify_and_respond(collected_data: dict, config: dict) -> dict:
             collected_data.get("problem_category", ""),
             collected_data.get("description", ""),
         )
+
+
+def assign_clusters(collected: dict, clusters: list, config: dict) -> dict:
+    """
+    Use Claude to assign cluster1, cluster2, gravity from the cluster table.
+    Returns dict with cluster1, cluster2, gravity.
+    """
+    client = _get_client(config)
+    if not client:
+        return {}
+
+    description = collected.get("description", "")
+    category = collected.get("problem_category", "")
+    product = collected.get("product", "")
+
+    cluster_list = json.dumps(
+        [{"cluster1": c["cluster1"], "cluster2": c["cluster2"],
+          "gravity": c.get("gravity", ""), "example": c.get("example", "")}
+         for c in clusters],
+        ensure_ascii=False,
+    )
+
+    system = (
+        "Sei un esperto di classificazione difetti alimentari per San Carlo / Unichips. "
+        "Ricevi la descrizione di un reclamo e devi assegnare il cluster più appropriato "
+        "dalla lista fornita.\n"
+        "Rispondi SOLO con un oggetto JSON con i campi: cluster1, cluster2, gravity.\n"
+        "Scegli ESATTAMENTE i valori presenti nella lista — non inventare nuovi cluster."
+    )
+
+    user_prompt = (
+        f"Prodotto: {product}\n"
+        f"Categoria problema: {category}\n"
+        f"Descrizione: {description}\n\n"
+        f"Cluster disponibili:\n{cluster_list}\n\n"
+        "Assegna il cluster più appropriato. Rispondi con JSON."
+    )
+
+    try:
+        response = client.messages.create(
+            model=_model(config),
+            max_tokens=200,
+            system=system,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        result = _parse_json_block(response.content[0].text)
+        if result.get("cluster1") and result.get("cluster2"):
+            gravity = result.get("gravity", "Media")
+            if gravity not in ("Alta", "Media", "Bassa"):
+                gravity = "Media"
+            return {
+                "cluster1": result["cluster1"],
+                "cluster2": result["cluster2"],
+                "gravity": gravity,
+            }
+    except Exception as e:
+        logger.error("assign_clusters failed: %s", e)
+
+    return {}
 
 
 def is_configured(config: dict) -> bool:

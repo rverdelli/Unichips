@@ -254,9 +254,10 @@ def process_message(
                     collected.get("description", "")
                 )
 
-            from modules.classifier import classify_complaint
+            from modules.classifier import classify_complaint, assign_clusters
             result = classify_complaint(collected, config)
-            complaint_data = {**collected, **result, "channel": "chatbot"}
+            cluster_result = assign_clusters(collected, config)
+            complaint_data = {**collected, **result, **cluster_result, "channel": "chatbot"}
             complaint_id = save_complaint(complaint_data)
             state["complaint_id"] = complaint_id
             state["phase"] = "done"

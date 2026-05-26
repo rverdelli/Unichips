@@ -103,6 +103,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
   font-size: 13px; cursor: pointer; transition: background .15s;
 }
 .btn-export:hover { background: #185c37; }
+.cluster-table { width:100%; border-collapse:collapse; font-size:12px; }
+.cluster-table th { background:#f5f5f5; padding:6px 8px; text-align:left; font-weight:600; color:#555; position:sticky; top:0; border-bottom:1.5px solid #ddd; }
+.cluster-table td { padding:3px 6px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+.ct-input { width:100%; border:1px solid #e0e0e0; border-radius:4px; padding:3px 5px; font-size:11.5px; font-family:inherit; }
+.ct-input:focus { border-color:#D42B2B; outline:none; }
+.ct-select { border:1px solid #e0e0e0; border-radius:4px; padding:3px 4px; font-size:11.5px; background:#fff; }
+.ct-del { background:none; border:none; color:#ccc; cursor:pointer; font-size:13px; padding:2px 5px; }
+.ct-del:hover { color:#D42B2B; }
 
 /* ── Table ── */
 .table-wrap {
@@ -385,9 +393,9 @@ input[type="date"]:focus { border-color: #D42B2B; }
             <th class="sortable" data-col="created_at">Data</th>
             <th class="sortable" data-col="customer_name">Cliente</th>
             <th class="sortable" data-col="product">Prodotto</th>
-            <th class="sortable" data-col="problem_category">Categoria</th>
+            <th class="sortable" data-col="cluster1">Cluster 1</th>
             <th class="sortable" data-col="status">Stato</th>
-            <th class="sortable" data-col="priority">Priorità</th>
+            <th class="sortable" data-col="gravity">Gravità</th>
             <th></th>
           </tr>
         </thead>
@@ -485,6 +493,25 @@ input[type="date"]:focus { border-color: #D42B2B; }
     <div class="config-section">
       <div class="config-label">📋 Regole di Classificazione Reclami</div>
       <textarea class="config-textarea" id="cfg-rules" rows="7"></textarea>
+    </div>
+    <div class="config-section">
+      <div class="config-label">🏷️ Tabella Cluster e Gravità</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">Definisce come vengono classificati i difetti. Editabile e salvabile.</div>
+      <div style="overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid #eee;border-radius:6px;">
+        <table class="cluster-table">
+          <thead>
+            <tr>
+              <th style="min-width:140px;">Cluster 1</th>
+              <th style="min-width:200px;">Cluster 2</th>
+              <th style="min-width:90px;">Gravità</th>
+              <th>Esempio</th>
+              <th style="width:30px;"></th>
+            </tr>
+          </thead>
+          <tbody id="cluster-tbody"></tbody>
+        </table>
+      </div>
+      <button class="btn btn-secondary" onclick="addClusterRow()" style="margin-top:8px;font-size:12px;padding:5px 12px;">+ Aggiungi riga</button>
     </div>
   </div>
   <div class="config-footer">
@@ -649,6 +676,7 @@ function sortItems(items) {
     let va = a[sortCol] ?? '';
     let vb = b[sortCol] ?? '';
     if (sortCol === 'priority') { va = PRIO_ORDER[va] ?? 9; vb = PRIO_ORDER[vb] ?? 9; }
+    else if (sortCol === 'gravity') { va = PRIO_ORDER[va] ?? 9; vb = PRIO_ORDER[vb] ?? 9; }
     else if (sortCol === 'status') { va = STATUS_ORDER[va] ?? 9; vb = STATUS_ORDER[vb] ?? 9; }
     else if (sortCol === 'id') { va = Number(va); vb = Number(vb); }
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
@@ -672,9 +700,9 @@ function renderTable(items) {
       <td class="td-sm">${(c.created_at||'').slice(0,10)}</td>
       <td>${esc(c.customer_name||'—')}</td>
       <td class="td-sm">${esc(c.product||'—')}</td>
-      <td class="td-sm">${esc(c.problem_category||'—')}</td>
+      <td class="td-sm">${esc(c.cluster1||c.problem_category||'—')}</td>
       <td><span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span></td>
-      <td><span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span></td>
+      <td><span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span></td>
       <td onclick="event.stopPropagation()">
         ${!['Chiuso','Chiuso automaticamente'].includes(c.status)
           ? `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;"
@@ -740,7 +768,7 @@ async function openModal(id) {
 
   const isClosed = ['Chiuso','Chiuso automaticamente'].includes(c.status);
   const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
-  const prioSpan    = `<span class="${PRIO_CLASS[c.priority]||''}">${c.priority||'—'}</span>`;
+  const gravSpan    = `<span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span>`;
 
   document.getElementById('modal-body').innerHTML = `
     <!-- Left col -->
@@ -756,9 +784,11 @@ async function openModal(id) {
       ${infoRow('Scadenza', c.expiry_date||'—')}
       ${infoRow('Punto vendita', c.purchase_location||'—')}
       ${infoRow('Classificazione', c.classification||'—')}
+      ${infoRow('Cluster 1', c.cluster1||'—')}
+      ${infoRow('Cluster 2', c.cluster2||'—')}
       ${infoRow('Risposta automatica', c.auto_response ? '✅ Sì' : '❌ No')}
       ${infoRow('Stato', statusBadge)}
-      ${infoRow('Priorità', prioSpan)}
+      ${infoRow('Gravità', gravSpan)}
 
       <div class="section-title" style="margin-top:16px;">Descrizione cliente</div>
       <div class="desc-box">${esc(c.description||'—')}</div>
@@ -986,6 +1016,36 @@ function renderTop5(items) {
 // ════════════════════════════════════════════════════════
 // CONFIG
 // ════════════════════════════════════════════════════════
+let cfgClusters = [];
+
+function renderClusterTable(clusters) {
+  const tbody = document.getElementById('cluster-tbody');
+  tbody.innerHTML = '';
+  clusters.forEach((c, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="ct-input" value="${esc(c.cluster1||'')}" oninput="cfgClusters[${i}].cluster1=this.value"></td>
+      <td><input class="ct-input" value="${esc(c.cluster2||'')}" oninput="cfgClusters[${i}].cluster2=this.value"></td>
+      <td><select class="ct-select" onchange="cfgClusters[${i}].gravity=this.value">
+        ${['Alta','Media','Bassa'].map(g=>`<option ${c.gravity===g?'selected':''}>${g}</option>`).join('')}
+      </select></td>
+      <td><input class="ct-input" value="${esc(c.example||'')}" oninput="cfgClusters[${i}].example=this.value"></td>
+      <td><button class="ct-del" onclick="deleteClusterRow(${i})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function deleteClusterRow(i) {
+  cfgClusters.splice(i, 1);
+  renderClusterTable(cfgClusters);
+}
+
+function addClusterRow() {
+  cfgClusters.push({cluster1:'', cluster2:'', gravity:'Media', example:''});
+  renderClusterTable(cfgClusters);
+}
+
 async function openConfig() {
   try {
     const r = await fetch('/admin/api/config');
@@ -994,6 +1054,8 @@ async function openConfig() {
     document.getElementById('cfg-model').value     = d.model || 'claude-haiku-4-5-20251001';
     document.getElementById('cfg-knowledge').value = d.common_knowledge || '';
     document.getElementById('cfg-rules').value     = d.classification_rules || '';
+    cfgClusters = Array.isArray(d.clusters) ? JSON.parse(JSON.stringify(d.clusters)) : [];
+    renderClusterTable(cfgClusters);
     const hasKey = !!d.anthropic_api_key;
     document.getElementById('api-key-status').innerHTML =
       hasKey ? '<span class="status-dot ok"></span>API Key configurata — AI attiva'
@@ -1017,6 +1079,7 @@ async function saveConfig() {
     model:               document.getElementById('cfg-model').value,
     common_knowledge:    document.getElementById('cfg-knowledge').value,
     classification_rules:document.getElementById('cfg-rules').value,
+    clusters: cfgClusters,
   };
   try {
     await fetch('/admin/api/config', {

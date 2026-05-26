@@ -20,6 +20,20 @@ except ImportError:
 from modules.database import init_db, DB_PATH
 from modules.constants import PRODUCTS, CATEGORIES, COMPLEX_CATEGORIES, PRIORITY_MAP
 
+# Maps old category → (cluster1, cluster2) for mock data generation
+_CAT_TO_CLUSTER = {
+    "Patatina bruciata":     ("ORGANOLETTICO",        "DIFETTI VISIVI"),
+    "Patatina verde":        ("ORGANOLETTICO",        "DIFETTI VISIVI"),
+    "Prodotto sbriciolato":  ("DIFETTI DI PACKAGING", "ROTTURE/INTRINSECHE DI PRODOTTO"),
+    "Gusto anomalo":         ("ORGANOLETTICO",        "GUSTO ANOMALO"),
+    "Corpo estraneo":        ("CORPO ESTRANEO",       "VARI"),
+    "Confezione vuota":      ("DIFETTI DI PACKAGING", "CARTONI VUOTI"),
+    "Confezione danneggiata":("DIFETTI DI PACKAGING", "SALDATURE APERTE"),
+    "Odore anomalo":         ("ORGANOLETTICO",        "CATTIVO SAPORE / ODORE / CONSISTENZA DA PACK-GADGET"),
+    "Muffa / alterazione":   ("MICROBIOLOGICO",       "MUFFA"),
+    "Altro":                 ("ORGANOLETTICO",        "GUSTO NON GRADITO"),
+}
+
 CATEGORY_WEIGHTS = [20, 15, 18, 12, 8, 5, 7, 6, 4, 5]
 
 # ~20 open out of 1000 → complex complaints have a small open chance
@@ -139,7 +153,8 @@ def generate_complaints(n=1000):
 
         descriptions = DESCRIPTIONS.get(category, DESCRIPTIONS["Altro"])
         description = random.choice(descriptions)
-        priority = PRIORITY_MAP.get(category, "Media")
+        gravity = PRIORITY_MAP.get(category, "Media")
+        cluster1, cluster2 = _CAT_TO_CLUSTER.get(category, ("ORGANOLETTICO", "GUSTO NON GRADITO"))
 
         complaints.append({
             "created_at": created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -155,7 +170,10 @@ def generate_complaints(n=1000):
                 "Eurospin", "Lidl", "Pam", "Auchan", "Bennet", ""
             ]),
             "status": status,
-            "priority": priority,
+            "priority": gravity,
+            "gravity": gravity,
+            "cluster1": cluster1,
+            "cluster2": cluster2,
             "channel": "chatbot",
             "classification": classification,
             "auto_response": 0 if is_complex else 1,
@@ -184,12 +202,12 @@ def main():
     conn.executemany("""
         INSERT INTO complaints
         (created_at, customer_name, customer_email, product, problem_category,
-         description, lot_code, expiry_date, purchase_location, status, priority,
-         channel, classification, auto_response, ai_response, closed_at, has_photo)
+         description, lot_code, expiry_date, purchase_location, status, priority, gravity,
+         cluster1, cluster2, channel, classification, auto_response, ai_response, closed_at, has_photo)
         VALUES
         (:created_at, :customer_name, :customer_email, :product, :problem_category,
-         :description, :lot_code, :expiry_date, :purchase_location, :status, :priority,
-         :channel, :classification, :auto_response, :ai_response, :closed_at, :has_photo)
+         :description, :lot_code, :expiry_date, :purchase_location, :status, :priority, :gravity,
+         :cluster1, :cluster2, :channel, :classification, :auto_response, :ai_response, :closed_at, :has_photo)
     """, complaints)
     conn.commit()
 
