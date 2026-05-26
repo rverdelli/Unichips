@@ -394,13 +394,14 @@ input[type="date"]:focus { border-color: #D42B2B; }
             <th class="sortable" data-col="customer_name">Cliente</th>
             <th class="sortable" data-col="product">Prodotto</th>
             <th class="sortable" data-col="cluster1">Cluster 1</th>
+            <th class="sortable" data-col="cluster2">Cluster 2</th>
             <th class="sortable" data-col="status">Stato</th>
             <th class="sortable" data-col="gravity">Gravità</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="complaints-tbody">
-          <tr><td colspan="8"><div class="loading">Caricamento…</div></td></tr>
+          <tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>
         </tbody>
       </table>
       <div class="pagination" id="pagination"></div>
@@ -654,7 +655,7 @@ async function loadComplaints(page = 0) {
     offset:   page * PAGE_SIZE,
   });
   const tbody = document.getElementById('complaints-tbody');
-  tbody.innerHTML = '<tr><td colspan="8"><div class="loading">Caricamento…</div></td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9"><div class="loading">Caricamento…</div></td></tr>';
   try {
     const r = await fetch('/admin/api/complaints?' + params);
     const d = await r.json();
@@ -667,7 +668,7 @@ async function loadComplaints(page = 0) {
     renderPagination(d.total, page);
     loadKpiGestione();
   } catch(e) {
-    tbody.innerHTML = '<tr><td colspan="8" style="color:#c0392b;padding:20px;">Errore nel caricamento dati.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#c0392b;padding:20px;">Errore nel caricamento dati.</td></tr>';
   }
 }
 
@@ -689,7 +690,7 @@ function renderTable(items) {
   items = sortItems(items);
   const tbody = document.getElementById('complaints-tbody');
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="8">
+    tbody.innerHTML = `<tr><td colspan="9">
       <div class="empty-state"><div class="empty-icon">📭</div><p>Nessun reclamo trovato.</p></div>
     </td></tr>`;
     return;
@@ -701,6 +702,7 @@ function renderTable(items) {
       <td>${esc(c.customer_name||'—')}</td>
       <td class="td-sm">${esc(c.product||'—')}</td>
       <td class="td-sm">${esc(c.cluster1||c.problem_category||'—')}</td>
+      <td class="td-sm" style="font-size:12px;color:#555;">${esc(c.cluster2||'—')}</td>
       <td><span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span></td>
       <td><span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span></td>
       <td onclick="event.stopPropagation()">
