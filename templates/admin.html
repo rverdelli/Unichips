@@ -492,10 +492,6 @@ input[type="date"]:focus { border-color: #D42B2B; }
       <textarea class="config-textarea" id="cfg-knowledge" rows="7"></textarea>
     </div>
     <div class="config-section">
-      <div class="config-label">📋 Regole di Classificazione Reclami</div>
-      <textarea class="config-textarea" id="cfg-rules" rows="7"></textarea>
-    </div>
-    <div class="config-section">
       <div class="config-label">🏷️ Tabella Cluster e Gravità</div>
       <div style="font-size:12px;color:#888;margin-bottom:8px;">Definisce come vengono classificati i difetti. Editabile e salvabile.</div>
       <div style="overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid #eee;border-radius:6px;">
@@ -1055,7 +1051,6 @@ async function openConfig() {
     document.getElementById('cfg-apikey').value    = d.anthropic_api_key || '';
     document.getElementById('cfg-model').value     = d.model || 'claude-haiku-4-5-20251001';
     document.getElementById('cfg-knowledge').value = d.common_knowledge || '';
-    document.getElementById('cfg-rules').value     = d.classification_rules || '';
     cfgClusters = Array.isArray(d.clusters) ? JSON.parse(JSON.stringify(d.clusters)) : [];
     renderClusterTable(cfgClusters);
     const hasKey = !!d.anthropic_api_key;
@@ -1080,7 +1075,6 @@ async function saveConfig() {
     anthropic_api_key:    document.getElementById('cfg-apikey').value.trim(),
     model:               document.getElementById('cfg-model').value,
     common_knowledge:    document.getElementById('cfg-knowledge').value,
-    classification_rules:document.getElementById('cfg-rules').value,
     clusters: cfgClusters,
   };
   try {

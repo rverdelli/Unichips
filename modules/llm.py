@@ -153,7 +153,6 @@ def generate_chat_reply(
         return _deterministic_reply(user_text, state)
 
     common_knowledge = config.get("common_knowledge", "")
-    classification_rules = config.get("classification_rules", "")
 
     system = (
         "Sei CarloBot, l'assistente virtuale di San Carlo / Unichips. "
@@ -161,7 +160,6 @@ def generate_chat_reply(
         "Il tuo scopo è aiutare i consumatori con informazioni sui prodotti "
         "e guidarli nell'apertura di segnalazioni di qualità.\n\n"
         f"Conoscenze di dominio:\n{common_knowledge}\n\n"
-        f"Regole di classificazione reclami:\n{classification_rules}\n\n"
         "Rispondi in modo conciso e utile. "
         "Se l'utente vuole aprire un reclamo, incoraggialo e guida la raccolta dati. "
         "Per domande generiche rispondi con le informazioni disponibili e offri suggerimenti.\n\n"
@@ -210,92 +208,16 @@ def generate_chat_reply(
         return _deterministic_reply(user_text, state)
 
 
-def classify_and_respond(collected_data: dict, config: dict) -> dict:
+def process_complaint_with_clusters(collected: dict, clusters: list, config: dict) -> dict:
     """
-    Use Claude to classify the complaint and generate a personalized customer response.
-    Returns dict with: classification, status, priority, auto_response, ai_response.
-    Falls back to keyword-based classifier on API failure.
-    """
-    from modules.classifier import _classify_mock  # local import avoids circular at module level
-
-    client = _get_client(config)
-    if not client:
-        return _classify_mock(
-            collected_data.get("problem_category", ""),
-            collected_data.get("description", ""),
-        )
-
-    classification_rules = config.get("classification_rules", "")
-
-    system = (
-        "Sei un esperto di qualità alimentare per San Carlo / Unichips. "
-        "Ricevi i dati di un reclamo cliente e devi:\n"
-        "1. Classificare il reclamo come 'semplice' (risposta automatica possibile) "
-        "o 'complesso' (richiede verifica del team qualità)\n"
-        "2. Determinare la priorità: 'Alta', 'Media', 'Bassa'\n"
-        "3. Generare una risposta professionale in italiano da inviare al cliente\n\n"
-        f"Regole di classificazione:\n{classification_rules}\n\n"
-        "Rispondi SOLO con un oggetto JSON valido con questi campi:\n"
-        "- classification: 'semplice' o 'complesso'\n"
-        "- status: 'Chiuso automaticamente' (se semplice) o 'Aperto' (se complesso)\n"
-        "- priority: 'Alta', 'Media' o 'Bassa'\n"
-        "- auto_response: true (se semplice) o false (se complesso)\n"
-        "- ai_response: risposta professionale completa in italiano da inviare al cliente "
-        "(con intestazione 'Gentile Cliente,' e firma 'Team Qualità San Carlo')"
-    )
-
-    complaint_str = "\n".join(
-        f"- {k}: {v}" for k, v in collected_data.items() if v and k not in ("channel", "has_photo")
-    )
-
-    try:
-        response = client.messages.create(
-            model=_model(config),
-            max_tokens=800,
-            system=system,
-            messages=[{"role": "user", "content": f"Dati del reclamo:\n{complaint_str}\n\nClassifica e genera la risposta."}],
-        )
-        result = _parse_json_block(response.content[0].text)
-
-        classification = result.get("classification", "semplice")
-        if classification not in ("semplice", "complesso"):
-            classification = "semplice"
-
-        gravity = result.get("priority", "Media")
-        if gravity not in ("Alta", "Media", "Bassa"):
-            gravity = "Media"
-
-        status_default = "Chiuso automaticamente" if classification == "semplice" else "Aperto"
-
-        return {
-            "classification": classification,
-            "status": result.get("status", status_default),
-            "priority": gravity,
-            "gravity": gravity,
-            "auto_response": result.get("auto_response", classification == "semplice"),
-            "ai_response": result.get("ai_response", ""),
-        }
-
-    except Exception as e:
-        logger.error("classify_and_respond failed: %s", e)
-        return _classify_mock(
-            collected_data.get("problem_category", ""),
-            collected_data.get("description", ""),
-        )
-
-
-def assign_clusters(collected: dict, clusters: list, config: dict) -> dict:
-    """
-    Use Claude to assign cluster1, cluster2, gravity from the cluster table.
-    Returns dict with cluster1, cluster2, gravity.
+    Single LLM call: assign cluster + derive classification from gravity + generate response.
+    - Alta  → complesso → escalation, rimborso + buono €5
+    - Media/Bassa → semplice → risposta informativa, nessun rimborso
+    Falls back to empty dict on failure (caller handles fallback).
     """
     client = _get_client(config)
     if not client:
         return {}
-
-    description = collected.get("description", "")
-    category = collected.get("problem_category", "")
-    product = collected.get("product", "")
 
     cluster_list = json.dumps(
         [{"cluster1": c["cluster1"], "cluster2": c["cluster2"],
@@ -304,43 +226,64 @@ def assign_clusters(collected: dict, clusters: list, config: dict) -> dict:
         ensure_ascii=False,
     )
 
-    system = (
-        "Sei un esperto di classificazione difetti alimentari per San Carlo / Unichips. "
-        "Ricevi la descrizione di un reclamo e devi assegnare il cluster più appropriato "
-        "dalla lista fornita.\n"
-        "Rispondi SOLO con un oggetto JSON con i campi: cluster1, cluster2, gravity.\n"
-        "Scegli ESATTAMENTE i valori presenti nella lista — non inventare nuovi cluster."
+    complaint_str = "\n".join(
+        f"- {k}: {v}" for k, v in collected.items()
+        if v and k not in ("channel", "has_photo", "problem_category")
     )
+    customer_name = collected.get("name", "Cliente")
 
-    user_prompt = (
-        f"Prodotto: {product}\n"
-        f"Categoria problema: {category}\n"
-        f"Descrizione: {description}\n\n"
-        f"Cluster disponibili:\n{cluster_list}\n\n"
-        "Assegna il cluster più appropriato. Rispondi con JSON."
+    system = (
+        "Sei un esperto di qualità alimentare per San Carlo / Unichips. "
+        "Ricevi i dati di un reclamo e devi:\n"
+        "1. Assegnare il cluster di difetto più appropriato dalla lista fornita\n"
+        "2. Generare una risposta professionale in italiano da inviare al cliente\n\n"
+        "La classificazione è determinata dalla gravità del cluster assegnato:\n"
+        "- Alta → complesso: scuse sincere, rimborso completo del prodotto + buono acquisto €5, "
+        "  il team la contatterà entro 24h, conservare la confezione\n"
+        "- Media/Bassa → semplice: spiegazione cordiale della causa naturale o tecnica, "
+        "  nessun rimborso, segnalazione registrata per miglioramento qualità\n\n"
+        "Rispondi SOLO con un oggetto JSON con i campi:\n"
+        "- cluster1: esattamente dalla lista fornita\n"
+        "- cluster2: esattamente dalla lista fornita\n"
+        "- gravity: 'Alta', 'Media' o 'Bassa' (dal cluster scelto)\n"
+        f"- ai_response: risposta completa in italiano (inizia con 'Gentile {customer_name},' "
+        "  e termina con 'Team Qualità San Carlo')"
     )
 
     try:
         response = client.messages.create(
             model=_model(config),
-            max_tokens=200,
+            max_tokens=900,
             system=system,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[{"role": "user", "content":
+                f"Dati del reclamo:\n{complaint_str}\n\n"
+                f"Cluster disponibili:\n{cluster_list}\n\n"
+                "Assegna il cluster e genera la risposta."}],
         )
         result = _parse_json_block(response.content[0].text)
-        if result.get("cluster1") and result.get("cluster2"):
-            gravity = result.get("gravity", "Media")
-            if gravity not in ("Alta", "Media", "Bassa"):
-                gravity = "Media"
-            return {
-                "cluster1": result["cluster1"],
-                "cluster2": result["cluster2"],
-                "gravity": gravity,
-            }
-    except Exception as e:
-        logger.error("assign_clusters failed: %s", e)
 
-    return {}
+        if not (result.get("cluster1") and result.get("cluster2")):
+            return {}
+
+        gravity = result.get("gravity", "Media")
+        if gravity not in ("Alta", "Media", "Bassa"):
+            gravity = "Media"
+
+        is_complex = gravity == "Alta"
+        return {
+            "cluster1":       result["cluster1"],
+            "cluster2":       result["cluster2"],
+            "gravity":        gravity,
+            "priority":       gravity,
+            "classification": "complesso" if is_complex else "semplice",
+            "status":         "Aperto" if is_complex else "Chiuso automaticamente",
+            "auto_response":  not is_complex,
+            "ai_response":    result.get("ai_response", ""),
+        }
+
+    except Exception as e:
+        logger.error("process_complaint_with_clusters failed: %s", e)
+        return {}
 
 
 def is_configured(config: dict) -> bool:
