@@ -3,5 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 data/complaints.db
+data/complaints_before_clear_*.db
 data/chatbot_config.json
+data/uploads/
 .DS_Store

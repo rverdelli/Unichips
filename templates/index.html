@@ -234,6 +234,7 @@ body {
 }
 .upload-drop:hover { background: #fef3e2; }
 .upload-drop.uploading { border-color: #aaa; color: #aaa; cursor: default; }
+.upload-drop.uploading:hover { background: transparent; }
 .upload-progress {
   height: 4px; border-radius: 2px;
   background: #ffe0b2; overflow: hidden; display: none;
@@ -246,6 +247,28 @@ body {
   display: none; padding: 6px 14px;
   background: #f0faf4; border-top: 1px solid #c3e6cb;
   font-size: 12px; color: #27ae60; flex-shrink: 0;
+}
+.upload-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.upload-chip {
+  max-width: 190px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid #f3cfaa;
+  color: #7a4b14;
+  font-size: 11.5px;
+}
+.upload-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Offline notice ── */
@@ -267,19 +290,24 @@ body {
   border-top: 1px solid #eee;
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
   flex-shrink: 0;
 }
 #chat-input {
   flex: 1;
   border: 1.5px solid #e0e0e0;
-  border-radius: 22px;
+  border-radius: 18px;
   padding: 9px 16px;
   font-size: 13.5px;
   font-family: inherit;
   outline: none;
   transition: border-color .2s;
   color: #222;
+  min-height: 38px;
+  max-height: 145px;
+  line-height: 1.45;
+  resize: none;
+  overflow-y: auto;
 }
 #chat-input:focus { border-color: #D42B2B; }
 #chat-input::placeholder { color: #aaa; }
@@ -337,17 +365,18 @@ body {
   <div id="chat-suggestions"></div>
 
   <!-- Upload -->
-  <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handleFileSelected(this)">
+  <input type="file" id="photo-input" accept="image/*" multiple style="display:none" onchange="handleFilesSelected(this)">
   <div id="upload-area">
-    <div class="upload-label">📎 Foto del problema <span>(obbligatoria per procedere)</span></div>
+    <div class="upload-label">Foto del problema <span>(obbligatorie, puoi caricarne piu' di una)</span></div>
     <div class="upload-drop" id="upload-drop" onclick="document.getElementById('photo-input').click()">
-      <div id="upload-drop-text">📷 Clicca qui per scegliere una foto</div>
+      <div id="upload-drop-text">Clicca qui per scegliere una o piu' immagini</div>
       <div class="upload-progress" id="upload-progress">
         <div class="upload-progress-bar" id="upload-progress-bar"></div>
       </div>
     </div>
+    <div class="upload-list" id="upload-list"></div>
   </div>
-  <div id="upload-ok">✓ Foto allegata — puoi continuare con il messaggio</div>
+  <div id="upload-ok">Immagini allegate</div>
 
   <!-- Offline notice -->
   <div id="offline-notice">
@@ -356,9 +385,11 @@ body {
 
   <!-- Input -->
   <div class="chat-input-area">
-    <input type="text" id="chat-input"
+    <textarea id="chat-input"
            placeholder="Scrivi un messaggio..."
-           onkeydown="if(event.key==='Enter')sendMessage()">
+           rows="1"
+           onkeydown="handleChatInputKeydown(event)"
+           oninput="resizeChatInput(this)"></textarea>
     <button id="send-btn" onclick="sendMessage()" aria-label="Invia">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
            stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -375,9 +406,9 @@ let sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
 
 let chatOpen = false;
 let messages = [];
-let showUpload = false;
-let photoUploaded = false;
-let pendingFinish = null;
+let uploadedAttachments = [];
+let uploadInProgress = false;
+let currentComplaintId = null;
 let currentPhase = 'welcome';
 let savedName = '';
 let savedEmail = '';
@@ -417,13 +448,26 @@ function toggleChat() {
 }
 
 // ── Send message ─────────────────────────────────────────────────────────────
+function handleChatInputKeydown(event) {
+  if (event.key === 'Enter' && event.ctrlKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
+function resizeChatInput(input) {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 145) + 'px';
+}
+
 async function sendMessage(text) {
   const input = document.getElementById('chat-input');
   const msg = (text !== undefined ? text : input.value).trim();
   if (!msg) return;
   input.value = '';
+  resizeChatInput(input);
 
-  addMessage('user', escapeHtml(msg));
+  addMessage('user', escapeHtml(msg).replace(/\n/g, '<br>'));
   renderSuggestions([]);
   showTyping();
 
@@ -447,23 +491,16 @@ async function sendMessage(text) {
       if (data.phase === 'done') {
         if (data.customer_name)  savedName  = data.customer_name;
         if (data.customer_email) savedEmail = data.customer_email;
+        if (data.complaint_id) currentComplaintId = data.complaint_id;
       }
 
       // New complaint started: new session, reset UI, prefill known name/email
       if (currentPhase === 'done' && data.phase === 'collecting') {
         sessionId = 'sess_' + Math.random().toString(36).slice(2) + Date.now();
         messages = [];
-        photoUploaded = false;
-        pendingFinish = null;
-        // Reset uploader UI completely
-        document.getElementById('upload-ok').style.display = 'none';
-        document.getElementById('upload-area').classList.remove('visible');
-        document.getElementById('photo-input').value = '';
-        const drop = document.getElementById('upload-drop');
-        drop.classList.remove('uploading');
-        document.getElementById('upload-drop-text').textContent = '📷 Clicca qui per scegliere una foto';
-        document.getElementById('upload-progress').style.display = 'none';
-        document.getElementById('upload-progress-bar').style.width = '0%';
+        uploadedAttachments = [];
+        currentComplaintId = null;
+        resetUploadUi();
         // Prefill name/email in new session
         if (savedName || savedEmail) {
           fetch('/api/session/prefill', {
@@ -475,15 +512,9 @@ async function sendMessage(text) {
       }
       currentPhase = data.phase || currentPhase;
 
-      if (data.phase === 'done' && !photoUploaded) {
-        pendingFinish = { reply: data.reply, suggestions: data.suggestions };
-        addMessage('bot', renderMarkdown('📋 Ho tutte le informazioni che mi servono!\n\nPrima di registrare la segnalazione ho bisogno di una **foto del problema** — caricala qui sopra per completare.'));
-        showUploadArea();
-      } else {
-        addMessage('bot', renderMarkdown(data.reply || ''));
-        renderSuggestions(data.suggestions || []);
-        if (data.show_upload && !photoUploaded) showUploadArea();
-      }
+      addMessage('bot', renderMarkdown(data.reply || ''));
+      renderSuggestions(data.suggestions || []);
+      if (data.show_upload) showUploadArea();
     }
   } catch(e) {
     hideTyping();
@@ -496,44 +527,88 @@ function clickSuggestion(text) {
   sendMessage(text);
 }
 
-// ── Upload simulation ────────────────────────────────────────────────────────
-function handleFileSelected(input) {
-  if (!input.files || !input.files[0]) return;
-  const fileName = input.files[0].name;
+// ── Real image upload ────────────────────────────────────────────────────────
+async function handleFilesSelected(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length || uploadInProgress) return;
+
   const drop = document.getElementById('upload-drop');
   const progressWrap = document.getElementById('upload-progress');
   const progressBar = document.getElementById('upload-progress-bar');
   const dropText = document.getElementById('upload-drop-text');
 
+  uploadInProgress = true;
   drop.classList.add('uploading');
-  dropText.textContent = '⏳ Caricamento ' + fileName + '…';
   progressWrap.style.display = 'block';
+  progressBar.style.width = '35%';
+  dropText.textContent = `Caricamento di ${files.length} immagine${files.length > 1 ? 'i' : ''}...`;
 
-  // Simulate upload progress
-  setTimeout(() => { progressBar.style.width = '60%'; }, 50);
-  setTimeout(() => { progressBar.style.width = '100%'; }, 600);
-  setTimeout(() => {
-    photoUploaded = true;
-    document.getElementById('upload-area').classList.remove('visible');
-    document.getElementById('upload-ok').style.display = 'block';
-    addMessage('bot', '📎 Foto <strong>' + escapeHtml(fileName) + '</strong> ricevuta, grazie!');
-    if (pendingFinish) {
-      // Now we can show the final confirmation that was held back
-      setTimeout(() => {
-        addMessage('bot', renderMarkdown(pendingFinish.reply || ''));
-        renderSuggestions(pendingFinish.suggestions || []);
-        pendingFinish = null;
-        scrollMessages();
-      }, 400);
-    }
+  const form = new FormData();
+  form.append('session_id', sessionId);
+  if (currentComplaintId) form.append('complaint_id', String(currentComplaintId));
+  files.forEach(file => form.append('files', file));
+
+  try {
+    const res = await fetch('/api/chat/uploads', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.detail || data.error || 'Upload non riuscito');
+
+    progressBar.style.width = '100%';
+    uploadedAttachments = uploadedAttachments.concat(data.attachments || []);
+    renderUploadedAttachments();
+    updateUploadOk();
+    addMessage('bot', `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`);
+  } catch (e) {
+    addMessage('bot', 'Upload immagine non riuscito: ' + escapeHtml(e.message || 'riprova.'));
+  } finally {
+    uploadInProgress = false;
+    input.value = '';
+    drop.classList.remove('uploading');
+    dropText.textContent = "Aggiungi altre immagini";
+    setTimeout(() => {
+      progressWrap.style.display = 'none';
+      progressBar.style.width = '0%';
+    }, 350);
     scrollMessages();
-  }, 1600);
+  }
 }
 
 function showUploadArea() {
-  if (!photoUploaded) {
-    document.getElementById('upload-area').classList.add('visible');
+  document.getElementById('upload-area').classList.add('visible');
+  renderUploadedAttachments();
+  updateUploadOk();
+}
+
+function resetUploadUi() {
+  document.getElementById('upload-ok').style.display = 'none';
+  document.getElementById('upload-area').classList.remove('visible');
+  document.getElementById('photo-input').value = '';
+  document.getElementById('upload-list').innerHTML = '';
+  const drop = document.getElementById('upload-drop');
+  drop.classList.remove('uploading');
+  document.getElementById('upload-drop-text').textContent = "Clicca qui per scegliere una o piu' immagini";
+  document.getElementById('upload-progress').style.display = 'none';
+  document.getElementById('upload-progress-bar').style.width = '0%';
+}
+
+function renderUploadedAttachments() {
+  const list = document.getElementById('upload-list');
+  if (!list) return;
+  list.innerHTML = uploadedAttachments.map(a => `
+    <div class="upload-chip" title="${escapeHtml(a.original_filename || '')}">
+      <span>${escapeHtml(a.original_filename || 'immagine')}</span>
+    </div>
+  `).join('');
+}
+
+function updateUploadOk() {
+  const ok = document.getElementById('upload-ok');
+  if (!uploadedAttachments.length) {
+    ok.style.display = 'none';
+    return;
   }
+  ok.textContent = `${uploadedAttachments.length} immagine${uploadedAttachments.length > 1 ? 'i' : ''} allegate al reclamo`;
+  ok.style.display = 'block';
 }
 
 // ── Message rendering ────────────────────────────────────────────────────────

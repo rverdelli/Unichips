@@ -3,12 +3,13 @@ import json
 import logging
 from pathlib import Path
 
-from modules.constants import COMPLAINT_UPDATABLE_COLUMNS, DEFAULT_CLUSTERS
+from modules.constants import COMPLAINT_UPDATABLE_COLUMNS, DEFAULT_CLUSTERS, PRODUCTS
 
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "complaints.db"
 CONFIG_PATH = Path(__file__).parent.parent / "data" / "chatbot_config.json"
+UPLOAD_ROOT = Path(__file__).parent.parent / "data" / "uploads"
 
 DEFAULT_COMMON_KNOWLEDGE = """- Il codice lotto è normalmente indicato sul retro o sul bordo della confezione, vicino alla data di scadenza.
 - Le patatine possono presentare leggere differenze di colore, forma e croccantezza perché derivano da materie prime naturali.
@@ -111,6 +112,21 @@ def init_db():
     conn.execute("CREATE INDEX IF NOT EXISTS idx_status   ON complaints(status)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_category ON complaints(problem_category)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_created  ON complaints(created_at)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS complaint_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            complaint_id INTEGER,
+            session_id TEXT,
+            original_filename TEXT NOT NULL,
+            stored_path TEXT NOT NULL,
+            content_type TEXT DEFAULT '',
+            size_bytes INTEGER DEFAULT 0,
+            uploaded_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (complaint_id) REFERENCES complaints(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attachment_complaint ON complaint_attachments(complaint_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attachment_session ON complaint_attachments(session_id)")
     conn.commit()
     _migrate_db(conn)
     # Index on cluster1 only after migration ensures the column exists
@@ -184,20 +200,102 @@ def update_complaint(complaint_id, data):
     conn.close()
 
 
+def save_attachment_record(
+    *,
+    session_id: str | None,
+    complaint_id: int | None,
+    original_filename: str,
+    stored_path: str,
+    content_type: str,
+    size_bytes: int,
+) -> int:
+    conn = get_connection()
+    cursor = conn.execute("""
+        INSERT INTO complaint_attachments
+        (session_id, complaint_id, original_filename, stored_path, content_type, size_bytes)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (session_id, complaint_id, original_filename, stored_path, content_type, size_bytes))
+    attachment_id = cursor.lastrowid
+    if complaint_id:
+        conn.execute("UPDATE complaints SET has_photo = 1 WHERE id = ?", (complaint_id,))
+    conn.commit()
+    conn.close()
+    return attachment_id
+
+
+def get_pending_attachments(session_id: str) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT * FROM complaint_attachments
+        WHERE session_id = ? AND complaint_id IS NULL
+        ORDER BY uploaded_at ASC, id ASC
+    """, (session_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def attach_pending_attachment(attachment_id: int, complaint_id: int, stored_path: str):
+    conn = get_connection()
+    conn.execute("""
+        UPDATE complaint_attachments
+        SET complaint_id = ?, stored_path = ?
+        WHERE id = ?
+    """, (complaint_id, stored_path, attachment_id))
+    conn.execute("UPDATE complaints SET has_photo = 1 WHERE id = ?", (complaint_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_complaint_attachments(complaint_id: int) -> list[dict]:
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT * FROM complaint_attachments
+        WHERE complaint_id = ?
+        ORDER BY uploaded_at ASC, id ASC
+    """, (complaint_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_attachment_by_id(attachment_id: int) -> dict | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM complaint_attachments WHERE id = ?",
+        (attachment_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_chatbot_config():
     if CONFIG_PATH.exists():
         cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         if "clusters" not in cfg:
             cfg["clusters"] = DEFAULT_CLUSTERS
+        if "products" not in cfg:
+            cfg["products"] = PRODUCTS
         return cfg
     return {
         "common_knowledge": DEFAULT_COMMON_KNOWLEDGE,
         "classification_rules": DEFAULT_CLASSIFICATION_RULES,
         "clusters": DEFAULT_CLUSTERS,
+        "products": PRODUCTS,
     }
 
 
 def save_chatbot_config(config):
+    if not config.get("clusters"):
+        config["clusters"] = DEFAULT_CLUSTERS
+    products = config.get("products") or PRODUCTS
+    clean_products = []
+    seen = set()
+    for product in products:
+        value = str(product).strip()
+        key = value.lower()
+        if value and key not in seen:
+            clean_products.append(value)
+            seen.add(key)
+    config["products"] = clean_products or PRODUCTS
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)

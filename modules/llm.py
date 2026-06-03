@@ -76,23 +76,30 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
     """
     from modules.chatbot import _extract_fields_regex  # local import avoids circular at module level
 
-    client = _get_client(config)
-    if not client:
-        return _extract_fields_regex(user_text, already_collected)
-
-    from modules.constants import PRODUCTS, CATEGORIES
+    from modules.constants import PRODUCTS as DEFAULT_PRODUCTS, CATEGORIES
 
     already_str = json.dumps(already_collected, ensure_ascii=False)
     common_knowledge = config.get("common_knowledge", "")
+    products = config.get("products") or DEFAULT_PRODUCTS
+    products = [str(product).strip() for product in products if str(product).strip()]
+    products = products or DEFAULT_PRODUCTS
+
+    client = _get_client(config)
+    if not client:
+        return _extract_fields_regex(user_text, already_collected, products)
 
     system = (
         "Sei un assistente per l'estrazione di informazioni da messaggi di clienti italiani "
         "che segnalano problemi con prodotti snack (patatine San Carlo).\n\n"
         f"Conoscenze di dominio:\n{common_knowledge}\n\n"
-        f"Prodotti possibili: {', '.join(PRODUCTS)}.\n\n"
+        f"Prodotti possibili: {', '.join(products)}.\n\n"
         f"Categorie problema possibili: {', '.join(CATEGORIES)}.\n\n"
         "Estrai DAL MESSAGGIO DELL'UTENTE solo le informazioni esplicitamente presenti. "
         "NON inventare o inferire informazioni non menzionate. "
+        "Il messaggio puo' essere una mail completa incollata in chat: usa header come Da/From/Oggetto, "
+        "campi etichettati come Nome/Email/Prodotto/Lotto/Scadenza/Punto vendita/Descrizione, "
+        "e il corpo della mail per ricostruire la descrizione del problema. "
+        "Ignora firme, saluti, disclaimer, testo quotato e header tecnici non utili. "
         "Rispondi SOLO con un oggetto JSON valido, senza testo aggiuntivo."
     )
 
@@ -111,10 +118,13 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         "Campi possibili: name (nome e cognome), email, product (nome prodotto), "
         "lot_code (codice lotto), description (descrizione problema), "
         "expiry_date (data scadenza), purchase_location (punto vendita).\n"
+        "Se il messaggio e' una mail, name puo' arrivare dal mittente o da una firma/campo Nome, "
+        "email puo' arrivare dall'header Da/From o dal corpo, e description deve descrivere solo "
+        "il problema del prodotto, senza copiare header, saluti o firme.\n"
         "NON estrarre problem_category: verrà dedotta automaticamente dalla descrizione.\n"
         "IMPORTANTE: lot_code deve essere esattamente nel formato LT seguito da 5 cifre (es. LT12345). "
         "Se il testo contiene un codice lotto con formato diverso, NON includerlo nel JSON.\n"
-        f"IMPORTANTE: il campo product deve essere ESATTAMENTE uno di questi valori: {', '.join(PRODUCTS)}. "
+        f"IMPORTANTE: il campo product deve essere ESATTAMENTE uno di questi valori: {', '.join(products)}. "
         "Se il cliente menziona un gusto o sapore (es. 'paprika', 'classica', 'tartufo') cerca di abbinarlo "
         "al nome prodotto corretto della lista. Se non riesci ad abbinarlo con certezza, NON includere il campo product.\n"
         + waiting_hint +
@@ -124,7 +134,7 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
     try:
         response = client.messages.create(
             model=_model(config),
-            max_tokens=512,
+            max_tokens=700,
             system=system,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -132,7 +142,7 @@ def extract_complaint_fields(user_text: str, already_collected: dict, config: di
         return {**already_collected, **{k: v for k, v in result.items() if v}}
     except Exception as e:
         logger.error("extract_complaint_fields failed: %s", e)
-        return _extract_fields_regex(user_text, already_collected)
+        return _extract_fields_regex(user_text, already_collected, products)
 
 
 def generate_chat_reply(
