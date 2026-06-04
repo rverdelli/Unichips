@@ -399,10 +399,16 @@ async def admin_stats(
         avg_days = round(sum(deltas) / len(deltas), 1) if deltas else None
 
     top_cat = None
+    top_product = None
+    top_cluster1 = None
     if rows:
         from collections import Counter
         counts = Counter(r.get("problem_category","") for r in rows if r.get("problem_category"))
         top_cat = counts.most_common(1)[0][0] if counts else None
+        product_counts = Counter(r.get("product","") for r in rows if r.get("product"))
+        top_product = product_counts.most_common(1)[0][0] if product_counts else None
+        cluster1_counts = Counter(r.get("cluster1","") for r in rows if r.get("cluster1"))
+        top_cluster1 = cluster1_counts.most_common(1)[0][0] if cluster1_counts else None
 
     # Monthly trend (last 24 months)
     from collections import defaultdict
@@ -461,6 +467,8 @@ async def admin_stats(
             "pending":  pending,
             "avg_days": avg_days,
             "top_cat":  top_cat,
+            "top_product": top_product,
+            "top_cluster1": top_cluster1,
         },
         "monthly":        monthly_series,
         "by_category":    by_category,

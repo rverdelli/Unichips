@@ -67,8 +67,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-s
 .kpi-card.teal   { border-top-color: #16a085; }
 .kpi-val {
   font-size: 28px; font-weight: 800; color: #D42B2B;
-  line-height: 1; margin-bottom: 5px;
+  line-height: 1; margin-bottom: 5px; overflow-wrap: anywhere;
 }
+.kpi-card.text .kpi-val { font-size: 17px; line-height: 1.15; }
 .kpi-card.blue   .kpi-val { color: #2980b9; }
 .kpi-card.green  .kpi-val { color: #27ae60; }
 .kpi-card.orange .kpi-val { color: #e67e22; }
@@ -482,12 +483,8 @@ input[type="date"]:focus { border-color: #D42B2B; }
         <div class="chart-title">Automatico vs Team qualità</div>
         <div class="chart-wrap"><canvas id="chart-auto"></canvas></div>
       </div>
-      <div class="chart-card">
-        <div class="chart-title">Tempo medio chiusura per categoria (giorni)</div>
-        <div class="chart-wrap"><canvas id="chart-avgdays"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">🏆 Top 5 prodotti con più reclami</div>
+      <div class="chart-card wide">
+        <div class="chart-title">Top 5 prodotti con più reclami</div>
         <div id="top5-content"></div>
       </div>
     </div>
@@ -790,8 +787,8 @@ async function loadKpiGestione() {
       ${kpiCard('blue',   k.open,    'Aperti', '')}
       ${kpiCard('purple', k.auto,    'Chiusi automaticamente', '')}
       ${kpiCard('orange', k.pending, 'Da gestire', '')}
-      ${kpiCard('green',  k.avg_days !== null ? k.avg_days+'gg' : '—', 'Giorni medi chiusura', '')}
-      ${kpiCard('teal',   k.top_cat||'—', 'Categoria top', '')}`;
+      ${kpiCard('green text', k.top_product||'—', 'Prodotto più frequente', '')}
+      ${kpiCard('teal text', k.top_cluster1||'—', 'Reclamo più frequente', '')}`;
   } catch(_) {}
 }
 
@@ -992,8 +989,8 @@ function renderKpiAnalisi(k) {
     ${kpiCard('blue',   k.open,    'Aperti')}
     ${kpiCard('purple', k.auto,    'Chiusi automaticamente')}
     ${kpiCard('orange', k.pending, 'Da gestire')}
-    ${kpiCard('green',  k.avg_days !== null ? k.avg_days+'gg' : '—', 'Giorni medi chiusura')}
-    ${kpiCard('teal',   k.top_cat||'—', 'Categoria top')}`;
+    ${kpiCard('green text', k.top_product||'—', 'Prodotto più frequente')}
+    ${kpiCard('teal text', k.top_cluster1||'—', 'Reclamo più frequente')}`;
 }
 
 function destroyChart(id) {
@@ -1041,20 +1038,6 @@ function renderCharts(d) {
       labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } } }
   });
 
-  // Avg days horizontal bar
-  destroyChart('avgdays');
-  charts['avgdays'] = new Chart(document.getElementById('chart-avgdays'), {
-    type: 'bar',
-    data: {
-      labels: d.avg_by_cat.map(x => x.label),
-      datasets: [{ data: d.avg_by_cat.map(x => x.value), backgroundColor: RED,
-                   borderRadius: 4 }]
-    },
-    options: { ...baseOpts(), indexAxis: 'y',
-               plugins: { legend: { display: false } },
-               scales: { x: { beginAtZero: true, title: { display: true, text: 'giorni', font: { size: 11 } } },
-                         y: { ticks: { font: { size: 11 } } } } }
-  });
 }
 
 function baseOpts() {

@@ -416,10 +416,16 @@ with tab1:
                 avg_days = "—"
             _mode = df_all["problem_category"].mode()
             top_cat = _mode.iloc[0] if not _mode.empty else "—"
+            _top_product = df_all["product"].dropna().mode()
+            top_product = _top_product.iloc[0] if not _top_product.empty else "—"
+            _top_cluster1 = df_all["cluster1"].dropna().mode()
+            top_cluster1 = _top_cluster1.iloc[0] if not _top_cluster1.empty else "—"
         else:
             total = open_c = auto_c = pending = 0
             avg_days = "—"
             top_cat = "—"
+            top_product = "—"
+            top_cluster1 = "—"
 
         with col_k1:
             st.markdown(f'<div class="kpi-card"><div class="kpi-value">{total}</div><div class="kpi-label">Reclami totali</div></div>', unsafe_allow_html=True)
@@ -430,10 +436,9 @@ with tab1:
         with col_k4:
             st.markdown(f'<div class="kpi-card orange"><div class="kpi-value">{pending}</div><div class="kpi-label">Da gestire</div></div>', unsafe_allow_html=True)
         with col_k5:
-            st.markdown(f'<div class="kpi-card green"><div class="kpi-value">{avg_days}</div><div class="kpi-label">Giorni medi chiusura</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-card green"><div class="kpi-value" style="font-size:16px;">{top_product}</div><div class="kpi-label">Prodotto più frequente</div></div>', unsafe_allow_html=True)
         with col_k6:
-            st.markdown(f'<div class="kpi-card"><div class="kpi-value" style="font-size:18px;">{top_cat}</div><div class="kpi-label">Categoria più frequente</div></div>', unsafe_allow_html=True)
-
+            st.markdown(f'<div class="kpi-card"><div class="kpi-value" style="font-size:16px;">{top_cluster1}</div><div class="kpi-label">Reclamo più frequente</div></div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Filters
@@ -563,6 +568,10 @@ with tab2:
             avg_days = round((closed_df["closed_at"] - closed_df["created_at"]).dt.days.mean(), 1) if not closed_df.empty else "—"
             _mode2 = dff["problem_category"].mode()
             top_cat = _mode2.iloc[0] if not _mode2.empty else "—"
+            _top_product2 = dff["product"].dropna().mode()
+            top_product = _top_product2.iloc[0] if not _top_product2.empty else "—"
+            _top_cluster12 = dff["cluster1"].dropna().mode()
+            top_cluster1 = _top_cluster12.iloc[0] if not _top_cluster12.empty else "—"
 
             with col_k1:
                 st.markdown(f'<div class="kpi-card"><div class="kpi-value">{total}</div><div class="kpi-label">Totale reclami</div></div>', unsafe_allow_html=True)
@@ -573,9 +582,9 @@ with tab2:
             with col_k4:
                 st.markdown(f'<div class="kpi-card orange"><div class="kpi-value">{pending}</div><div class="kpi-label">Da gestire</div></div>', unsafe_allow_html=True)
             with col_k5:
-                st.markdown(f'<div class="kpi-card green"><div class="kpi-value">{avg_days}</div><div class="kpi-label">Giorni medi chiusura</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="kpi-card green"><div class="kpi-value" style="font-size:16px;">{top_product}</div><div class="kpi-label">Prodotto più frequente</div></div>', unsafe_allow_html=True)
             with col_k6:
-                st.markdown(f'<div class="kpi-card"><div class="kpi-value" style="font-size:16px;">{top_cat}</div><div class="kpi-label">Categoria top</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="kpi-card"><div class="kpi-value" style="font-size:16px;">{top_cluster1}</div><div class="kpi-label">Reclamo più frequente</div></div>', unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -623,7 +632,7 @@ with tab2:
                 st.plotly_chart(fig4, use_container_width=True)
 
             # ── Charts row 3 ──────────────────────────────────────────────────
-            col_g5, col_g6 = st.columns(2)
+            col_g5 = st.container()
             with col_g5:
                 auto_vs_manual = dff["classification"].value_counts().reset_index()
                 auto_vs_manual.columns = ["tipo", "count"]
@@ -636,25 +645,8 @@ with tab2:
                 fig5.update_layout(title_font_size=16, margin=dict(t=40, b=10))
                 st.plotly_chart(fig5, use_container_width=True)
 
-            with col_g6:
-                if not closed_df.empty:
-                    closed_df2 = closed_df.copy()
-                    closed_df2["days_to_close"] = (closed_df2["closed_at"] - closed_df2["created_at"]).dt.days
-                    avg_by_cat = closed_df2.groupby("problem_category")["days_to_close"].mean().round(1).reset_index()
-                    avg_by_cat.columns = ["categoria", "giorni_medi"]
-                    avg_by_cat = avg_by_cat.sort_values("giorni_medi", ascending=True)
-                    fig6 = px.bar(avg_by_cat, x="giorni_medi", y="categoria", orientation="h",
-                                  title="Tempo medio chiusura per categoria (giorni)",
-                                  color_discrete_sequence=[RED])
-                    fig6.update_layout(plot_bgcolor="white", paper_bgcolor="white",
-                                       title_font_size=14, margin=dict(t=40, b=10),
-                                       xaxis_title="Giorni medi", yaxis_title="")
-                    st.plotly_chart(fig6, use_container_width=True)
-                else:
-                    st.info("Nessun reclamo chiuso nel periodo selezionato.")
-
             # ── Top 5 prodotti ────────────────────────────────────────────────
-            st.markdown("### 🏆 Top 5 prodotti con più reclami")
+            st.markdown("### Top 5 prodotti con più reclami")
             top5 = dff["product"].value_counts().head(5).reset_index()
             top5.columns = ["Prodotto", "N. Reclami"]
             top5.index = range(1, len(top5) + 1)
