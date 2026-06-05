@@ -3,6 +3,8 @@ Chatbot conversation logic (state machine).
 LLM calls are delegated to modules/llm.py — swap API key to go live.
 """
 import logging
+import html
+import json
 import re
 import unicodedata
 
@@ -16,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 MAX_FIELD_LENGTH = 1000  # Guard against absurdly long inputs
 BULK_MESSAGE_MIN_LENGTH = 180
+MAX_CONVERSATION_MESSAGES = 200
+MAX_CONVERSATION_TEXT_LENGTH = 5000
 
 
 # ── State helpers ────────────────────────────────────────────────────────────
@@ -40,6 +44,60 @@ def build_summary(collected: dict) -> str:
         if val:
             lines.append(f"- **{FIELD_LABELS[field]}**: {val}")
     return "\n".join(lines)
+
+
+def _plain_message_text(value) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        try:
+            value = json.dumps(value, ensure_ascii=False)
+        except TypeError:
+            value = str(value)
+
+    text = re.sub(r"(?i)<br\s*/?>", "\n", value)
+    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
+    text = re.sub(r"</?[a-z][a-z0-9-]*(?:\s+[^>]*)?>", "", text)
+    text = html.unescape(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text[:MAX_CONVERSATION_TEXT_LENGTH]
+
+
+def _normalise_history_role(role) -> str:
+    value = str(role or "").strip().lower()
+    if value in ("user", "cliente", "customer"):
+        return "user"
+    return "bot"
+
+
+def _append_conversation_turn(items: list[dict], role: str, text: str | None):
+    clean_text = _plain_message_text(text)
+    if not clean_text:
+        return
+    clean_role = _normalise_history_role(role)
+    if items and items[-1].get("role") == clean_role and items[-1].get("text") == clean_text:
+        return
+    items.append({"role": clean_role, "text": clean_text})
+
+
+def build_conversation_history(
+    conversation_history: list | None,
+    user_text: str | None = None,
+    bot_reply: str | None = None,
+) -> list[dict]:
+    items: list[dict] = []
+    for msg in conversation_history or []:
+        if not isinstance(msg, dict):
+            continue
+        _append_conversation_turn(
+            items,
+            msg.get("role"),
+            msg.get("raw_text") or msg.get("text") or msg.get("content") or msg.get("message"),
+        )
+    _append_conversation_turn(items, "user", user_text)
+    _append_conversation_turn(items, "bot", bot_reply)
+    return items[-MAX_CONVERSATION_MESSAGES:]
 
 
 LOT_CODE_RE = re.compile(r'\bLT\d{5}\b', re.IGNORECASE)
@@ -605,7 +663,15 @@ def process_message(
 
             from modules.classifier import process_complaint
             result = process_complaint(collected, config)
-            complaint_data = {**collected, **result, "channel": "chatbot"}
+            complaint_data = {
+                **collected,
+                **result,
+                "channel": "chatbot",
+                "conversation_history": build_conversation_history(
+                    conversation_history,
+                    user_text,
+                ),
+            }
             complaint_id = save_complaint(complaint_data)
             state["complaint_id"] = complaint_id
             state["phase"] = "done"

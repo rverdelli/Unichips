@@ -2,6 +2,7 @@
 FastAPI backend — pagina pubblica + API chatbot + dashboard admin.
 """
 import io
+import json
 import mimetypes
 import re
 import shutil
@@ -25,6 +26,7 @@ from modules.database import (
     get_complaint_attachments, get_attachment_by_id,
 )
 from modules.chatbot import init_state, process_message
+from modules.chatbot import build_conversation_history
 from modules import llm as llm_module
 from modules.constants import COMPLAINT_UPDATABLE_COLUMNS
 
@@ -116,6 +118,18 @@ def _attachment_payload(row: dict) -> dict:
     }
 
 
+def _parse_conversation_history(value) -> list[dict]:
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
 def _claim_session_attachments(session_id: str, complaint_id: int) -> int:
     pending = get_pending_attachments(session_id)
     if not pending:
@@ -180,6 +194,19 @@ async def chat(req: ChatRequest):
             attachments_count = _claim_session_attachments(req.session_id, new_state["complaint_id"])
             if attachments_count:
                 new_state.setdefault("collected", {})["has_photo"] = True
+            try:
+                update_complaint(new_state["complaint_id"], {
+                    "conversation_history": json.dumps(
+                        build_conversation_history(req.history, req.message, reply),
+                        ensure_ascii=False,
+                    )
+                })
+            except Exception:
+                logger.warning(
+                    "Unable to persist conversation history for complaint %s",
+                    new_state["complaint_id"],
+                    exc_info=True,
+                )
         set_session(req.session_id, new_state)
         collected = new_state.get("collected", {})
         return {
@@ -326,6 +353,7 @@ async def admin_get_complaint(complaint_id: int):
         _attachment_payload(attachment)
         for attachment in get_complaint_attachments(complaint_id)
     ]
+    row["conversation_history"] = _parse_conversation_history(row.get("conversation_history"))
     return row
 
 

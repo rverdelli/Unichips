@@ -38,6 +38,7 @@ def _migrate_db(conn):
         ("cluster1", "TEXT DEFAULT ''"),
         ("cluster2", "TEXT DEFAULT ''"),
         ("gravity",  "TEXT DEFAULT ''"),
+        ("conversation_history", "TEXT DEFAULT ''"),
     ]:
         if col not in existing:
             conn.execute(f"ALTER TABLE complaints ADD COLUMN {col} {definition}")
@@ -62,6 +63,14 @@ _CATEGORY_TO_CLUSTER = {
     "Muffa / alterazione":   ("MICROBIOLOGICO",       "MUFFA"),
     "Altro":                 ("ORGANOLETTICO",        "GUSTO NON GRADITO"),
 }
+
+_COMPLAINT_LIST_COLUMNS = """
+    id, created_at, customer_name, customer_email, product,
+    problem_category, description, lot_code, expiry_date,
+    purchase_location, status, priority, channel, classification,
+    auto_response, ai_response, closed_at, has_photo, cluster1,
+    cluster2, gravity
+"""
 
 
 def _backfill_clusters(conn):
@@ -106,7 +115,8 @@ def init_db():
             has_photo INTEGER DEFAULT 0,
             cluster1 TEXT DEFAULT '',
             cluster2 TEXT DEFAULT '',
-            gravity TEXT DEFAULT ''
+            gravity TEXT DEFAULT '',
+            conversation_history TEXT DEFAULT ''
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_status   ON complaints(status)")
@@ -135,6 +145,17 @@ def init_db():
     conn.close()
 
 
+def _serialize_conversation_history(value):
+    if not value:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except TypeError:
+        return json.dumps(str(value), ensure_ascii=False)
+
+
 def save_complaint(data):
     gravity = data.get("gravity") or data.get("priority") or "Media"
     conn = get_connection()
@@ -142,8 +163,9 @@ def save_complaint(data):
         INSERT INTO complaints
         (customer_name, customer_email, product, problem_category, description,
          lot_code, expiry_date, purchase_location, status, priority, channel,
-         classification, auto_response, ai_response, has_photo, cluster1, cluster2, gravity)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         classification, auto_response, ai_response, has_photo, cluster1, cluster2,
+         gravity, conversation_history)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         data.get("name"), data.get("email"), data.get("product"),
         data.get("problem_category"), data.get("description"),
@@ -153,6 +175,7 @@ def save_complaint(data):
         data.get("classification"), 1 if data.get("auto_response") else 0,
         data.get("ai_response", ""), 1 if data.get("has_photo") else 0,
         data.get("cluster1", ""), data.get("cluster2", ""), gravity,
+        _serialize_conversation_history(data.get("conversation_history")),
     ))
     complaint_id = cursor.lastrowid
     conn.commit()
@@ -162,7 +185,7 @@ def save_complaint(data):
 
 def get_complaints(filters=None):
     conn = get_connection()
-    query = "SELECT * FROM complaints WHERE 1=1"
+    query = f"SELECT {_COMPLAINT_LIST_COLUMNS} FROM complaints WHERE 1=1"
     params = []
     if filters:
         if filters.get("status") and filters["status"] != "Tutti":
@@ -303,6 +326,6 @@ def save_chatbot_config(config):
 
 def get_stats():
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM complaints").fetchall()
+    rows = conn.execute(f"SELECT {_COMPLAINT_LIST_COLUMNS} FROM complaints").fetchall()
     conn.close()
     return [dict(r) for r in rows]

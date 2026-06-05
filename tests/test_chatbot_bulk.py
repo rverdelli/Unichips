@@ -64,7 +64,7 @@ class ChatbotBulkComplaintTest(unittest.TestCase):
         state["collected"]["has_photo"] = True
         return state
 
-    def _run(self, message, state=None, config=None):
+    def _run(self, message, state=None, config=None, history=None):
         classifier_result = {
             "cluster1": "CORPO ESTRANEO",
             "cluster2": "VARI",
@@ -79,7 +79,7 @@ class ChatbotBulkComplaintTest(unittest.TestCase):
              patch("modules.llm.is_configured", return_value=False), \
              patch("modules.classifier.process_complaint", return_value=classifier_result), \
              patch("modules.chatbot.save_complaint", return_value=123) as save_complaint:
-            reply, new_state, suggestions = process_message(message, state or init_state(), [])
+            reply, new_state, suggestions = process_message(message, state or init_state(), history or [])
         return reply, new_state, suggestions, save_complaint
 
     def test_complete_mail_from_welcome_is_saved_in_one_turn(self):
@@ -146,6 +146,28 @@ class ChatbotBulkComplaintTest(unittest.TestCase):
         self.assertEqual(state["phase"], "done")
         self.assertEqual(state["collected"]["product"], "Snack Test")
         save_complaint.assert_called_once()
+
+    def test_conversation_history_is_saved_with_complete_complaint(self):
+        history = [
+            {"role": "bot", "text": "Ciao, sono <strong>CarloBot</strong>."},
+            {"role": "user", "text": "Voglio sottoporre un reclamo"},
+        ]
+
+        _, _, _, save_complaint = self._run(
+            COMPLETE_MAIL,
+            self._state_with_photo(),
+            history=history,
+        )
+
+        saved = save_complaint.call_args.args[0]
+        self.assertEqual(saved["conversation_history"][0], {
+            "role": "bot",
+            "text": "Ciao, sono CarloBot.",
+        })
+        self.assertEqual(saved["conversation_history"][-1], {
+            "role": "user",
+            "text": COMPLETE_MAIL.strip(),
+        })
 
 
 if __name__ == "__main__":

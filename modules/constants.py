@@ -99,6 +99,7 @@ COMPLAINT_UPDATABLE_COLUMNS = frozenset({
     "customer_name", "customer_email", "product", "problem_category",
     "description", "lot_code", "expiry_date", "purchase_location",
     "classification", "auto_response", "cluster1", "cluster2",
+    "conversation_history",
 })
 
 # Default cluster/gravity table — mirrors the San Carlo quality defect hierarchy

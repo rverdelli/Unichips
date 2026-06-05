@@ -202,6 +202,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
   max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column;
   box-shadow: 0 20px 60px rgba(0,0,0,.2);
   animation: modalIn .22s ease;
+  position: relative;
 }
 @keyframes modalIn {
   from { transform: translateY(20px); opacity: 0; }
@@ -311,6 +312,172 @@ input[type="date"]:focus { border-color: #D42B2B; }
 .btn-success:hover { background: #219a52; }
 .btn-back { background: none; border: none; color: #D42B2B; cursor: pointer;
             font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+/* ── Conversation panel ── */
+.conversation-fab {
+  position: absolute;
+  right: 22px;
+  bottom: 72px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: #D42B2B;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 5px 22px rgba(212,43,43,.38);
+  z-index: 4;
+  transition: transform .15s, box-shadow .15s, background .15s;
+}
+.conversation-fab:hover {
+  background: #b82020;
+  transform: translateY(-1px);
+  box-shadow: 0 7px 28px rgba(212,43,43,.46);
+}
+.conversation-fab.is-disabled {
+  background: #cfcfcf;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.conversation-fab svg { width: 22px; height: 22px; pointer-events: none; }
+.conversation-panel {
+  position: absolute;
+  right: 22px;
+  bottom: 128px;
+  width: min(390px, calc(100% - 44px));
+  max-height: min(560px, calc(90vh - 150px));
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 18px;
+  box-shadow: 0 12px 44px rgba(0,0,0,.2);
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  z-index: 5;
+}
+.conversation-panel.open { display: flex; }
+.conversation-panel.is-large {
+  position: fixed;
+  inset: 28px;
+  width: auto;
+  max-height: none;
+  border-radius: 18px;
+  z-index: 760;
+}
+.conversation-header {
+  background: #D42B2B;
+  color: #fff;
+  padding: 13px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.conversation-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.conversation-title { flex: 1; min-width: 0; }
+.conversation-name { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.conversation-sub { font-size: 11.5px; color: rgba(255,255,255,.78); margin-top: 2px; }
+.conversation-tool {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.conversation-tool:hover { background: rgba(255,255,255,.32); }
+.conversation-tool svg { width: 15px; height: 15px; pointer-events: none; }
+.conversation-messages {
+  background: #f5f5f5;
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+.conv-msg { display: flex; gap: 8px; align-items: flex-end; }
+.conv-msg.user { justify-content: flex-end; }
+.conv-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #D42B2B;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.conv-bubble {
+  max-width: 82%;
+  padding: 9px 12px;
+  border-radius: 17px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.conversation-panel.is-large .conv-bubble { max-width: min(760px, 84%); font-size: 13.5px; }
+.conv-bubble strong { font-weight: 700; }
+.conv-bubble em { font-style: italic; }
+.conv-bubble code {
+  background: rgba(0,0,0,.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-family: Consolas, 'Courier New', monospace;
+}
+.conv-bubble ul { margin: 6px 0; padding-left: 18px; }
+.conv-bubble li { margin-bottom: 3px; }
+.conv-msg.bot .conv-bubble {
+  background: #fff;
+  color: #222;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.conv-msg.user .conv-bubble {
+  background: #D42B2B;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.conversation-empty {
+  padding: 28px 18px;
+  text-align: center;
+  color: #aaa;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+@media (max-width: 760px) {
+  .modal-body { grid-template-columns: 1fr; }
+  .conversation-panel {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    bottom: 126px;
+  }
+  .conversation-panel.is-large { inset: 12px; }
+}
 
 /* ── Config panel ── */
 .config-overlay {
@@ -810,6 +977,7 @@ async function openModal(id) {
   const isClosed = ['Chiuso','Chiuso automaticamente'].includes(c.status);
   const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
   const gravSpan    = `<span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span>`;
+  const conversation = getConversationItems(c.conversation_history);
 
   document.getElementById('modal-body').innerHTML = `
     <!-- Left col -->
@@ -820,11 +988,9 @@ async function openModal(id) {
       ${infoRow('Cliente', c.customer_name||'—')}
       ${infoRow('Email', c.customer_email||'—')}
       ${infoRow('Prodotto', c.product||'—')}
-      ${infoRow('Categoria', c.problem_category||'—')}
       ${infoRow('Codice lotto', c.lot_code||'—')}
       ${infoRow('Scadenza', c.expiry_date||'—')}
       ${infoRow('Punto vendita', c.purchase_location||'—')}
-      ${infoRow('Classificazione', c.classification||'—')}
       ${infoRow('Cluster 1', c.cluster1||'—')}
       ${infoRow('Cluster 2', c.cluster2||'—')}
       ${infoRow('Risposta automatica', c.auto_response ? '✅ Sì' : '❌ No')}
@@ -877,7 +1043,8 @@ async function openModal(id) {
         </div>
         <div class="response-editor" id="modal-response" contenteditable="true">${renderDraft(buildResolutionDraft(c))}</div>
       `}
-    </div>`;
+    </div>
+    ${renderConversationLauncher(conversation)}`;
 
   document.getElementById('modal-actions').innerHTML = isClosed ? '' : `
     <button class="btn btn-primary" onclick="sendResponse(${c.id}, false)">📨 Invia risposta</button>
@@ -900,6 +1067,128 @@ function closeModal(e) {
 
 function infoRow(label, val) {
   return `<div class="info-row"><span class="info-label">${label}</span><span class="info-val">${val}</span></div>`;
+}
+
+function getConversationItems(value) {
+  let items = [];
+  if (Array.isArray(value)) {
+    items = value;
+  } else if (typeof value === 'string' && value.trim()) {
+    try { items = JSON.parse(value); } catch(_) { items = []; }
+  }
+  return (Array.isArray(items) ? items : [])
+    .map(m => ({
+      role: m && m.role === 'user' ? 'user' : 'bot',
+      text: String((m && (m.text || m.content || m.message)) || '').trim()
+    }))
+    .filter(m => m.text);
+}
+
+function renderConversationLauncher(items) {
+  const hasHistory = items.length > 0;
+  const clickHandler = hasHistory ? 'toggleConversationPanel(event)' : 'showMissingConversation(event)';
+  const disabledClass = hasHistory ? '' : ' is-disabled';
+  const title = hasHistory ? 'Apri conversazione originale' : 'Storico conversazione non disponibile';
+  return `
+    <button class="conversation-fab${disabledClass}" onclick="${clickHandler}" title="${title}" aria-label="${title}">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-3.9-.9L3 20.5l1.5-5.2A8.5 8.5 0 1 1 21 11.5Z"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="conversation-panel" id="conversation-panel" onclick="event.stopPropagation()">
+      <div class="conversation-header">
+        <div class="conversation-avatar">CB</div>
+        <div class="conversation-title">
+          <div class="conversation-name">Conversazione originale</div>
+          <div class="conversation-sub">Messaggi raccolti dal chatbot</div>
+        </div>
+        <button class="conversation-tool" onclick="toggleConversationSize(event)" title="Espandi conversazione" aria-label="Espandi conversazione">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="conversation-tool" onclick="closeConversationPanel(event)" aria-label="Chiudi">×</button>
+      </div>
+      <div class="conversation-messages">
+        ${renderConversationMessages(items)}
+      </div>
+    </div>`;
+}
+
+function renderConversationMessages(items) {
+  if (!items.length) {
+    return '<div class="conversation-empty">Storico non disponibile per questo reclamo.</div>';
+  }
+  return items.map(m => {
+    const safeText = formatConversationText(m.text);
+    if (m.role === 'user') {
+      return `<div class="conv-msg user"><div class="conv-bubble">${safeText}</div></div>`;
+    }
+    return `<div class="conv-msg bot"><div class="conv-icon">CB</div><div class="conv-bubble">${safeText}</div></div>`;
+  }).join('');
+}
+
+function formatConversationText(text) {
+  let safe = esc(text);
+  const codeBlocks = [];
+  safe = safe.replace(/`([^`]+)`/g, (_, code) => {
+    const i = codeBlocks.length;
+    codeBlocks.push(`<code>${code}</code>`);
+    return `@@CODE_${i}@@`;
+  });
+  safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  safe = safe.replace(/\*(?!\s)([^*]*?\S)\*/g, '<em>$1</em>');
+  safe = safe.replace(/@@CODE_(\d+)@@/g, (_, i) => codeBlocks[Number(i)] || '');
+
+  const lines = safe.split(/\n/);
+  let html = '';
+  let inList = false;
+  lines.forEach(line => {
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!inList) {
+        html += '<ul>';
+        inList = true;
+      }
+      html += `<li>${bullet[1]}</li>`;
+      return;
+    }
+    if (inList) {
+      html += '</ul>';
+      inList = false;
+    }
+    html += line.trim() ? `${line}<br>` : '<br>';
+  });
+  if (inList) html += '</ul>';
+  return html.replace(/(<br>){3,}/g, '<br><br>').replace(/<br>$/,'');
+}
+
+function toggleConversationPanel(event) {
+  if (event) event.stopPropagation();
+  const panel = document.getElementById('conversation-panel');
+  if (!panel) return;
+  panel.classList.toggle('open');
+}
+
+function closeConversationPanel(event) {
+  if (event) event.stopPropagation();
+  const panel = document.getElementById('conversation-panel');
+  if (panel) panel.classList.remove('open', 'is-large');
+}
+
+function toggleConversationSize(event) {
+  if (event) event.stopPropagation();
+  const panel = document.getElementById('conversation-panel');
+  if (!panel) return;
+  panel.classList.toggle('is-large');
+}
+
+function showMissingConversation(event) {
+  if (event) event.stopPropagation();
+  showToast('Storico conversazione non disponibile per questo reclamo', true);
 }
 
 function renderAttachments(items) {

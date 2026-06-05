@@ -467,7 +467,7 @@ async function sendMessage(text) {
   input.value = '';
   resizeChatInput(input);
 
-  addMessage('user', escapeHtml(msg).replace(/\n/g, '<br>'));
+  addMessage('user', escapeHtml(msg).replace(/\n/g, '<br>'), msg);
   renderSuggestions([]);
   showTyping();
 
@@ -478,7 +478,7 @@ async function sendMessage(text) {
       body: JSON.stringify({
         session_id: sessionId,
         message: msg,
-        history: messages.slice(-12)
+        history: messages
       })
     });
     const data = await res.json();
@@ -512,7 +512,7 @@ async function sendMessage(text) {
       }
       currentPhase = data.phase || currentPhase;
 
-      addMessage('bot', renderMarkdown(data.reply || ''));
+      addMessage('bot', renderMarkdown(data.reply || ''), data.reply || '');
       renderSuggestions(data.suggestions || []);
       if (data.show_upload) showUploadArea();
     }
@@ -557,7 +557,8 @@ async function handleFilesSelected(input) {
     uploadedAttachments = uploadedAttachments.concat(data.attachments || []);
     renderUploadedAttachments();
     updateUploadOk();
-    addMessage('bot', `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`);
+    addMessage('bot', `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`,
+      `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`);
   } catch (e) {
     addMessage('bot', 'Upload immagine non riuscito: ' + escapeHtml(e.message || 'riprova.'));
   } finally {
@@ -612,8 +613,8 @@ function updateUploadOk() {
 }
 
 // ── Message rendering ────────────────────────────────────────────────────────
-function addMessage(role, html) {
-  messages.push({role, text: html});
+function addMessage(role, html, rawText) {
+  messages.push({role, text: rawText !== undefined ? rawText : html});
   const container = document.getElementById('chat-messages');
 
   const wrap = document.createElement('div');

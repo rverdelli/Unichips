@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -61,6 +62,28 @@ class AttachmentPersistenceTest(unittest.TestCase):
         self.assertEqual(len(attachments), 1)
         self.assertEqual(attachments[0]["original_filename"], "foto.png")
         self.assertEqual(attachments[0]["stored_path"], f"complaints/{complaint_id}/foto.png")
+
+    def test_complaint_can_store_conversation_history(self):
+        conversation = [
+            {"role": "bot", "text": "Ciao, come posso aiutarti?"},
+            {"role": "user", "text": "Ho trovato una patatina bruciata."},
+        ]
+
+        complaint_id = database.save_complaint({
+            "name": "Mario Rossi",
+            "email": "mario@example.com",
+            "product": "Classica",
+            "problem_category": "Patatina bruciata",
+            "description": "Patatine bruciate nella confezione.",
+            "lot_code": "LT12345",
+            "status": "Aperto",
+            "classification": "complesso",
+            "conversation_history": conversation,
+        })
+
+        complaint = database.get_complaint_by_id(complaint_id)
+
+        self.assertEqual(json.loads(complaint["conversation_history"]), conversation)
 
 
 if __name__ == "__main__":
