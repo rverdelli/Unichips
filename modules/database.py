@@ -223,6 +223,16 @@ def update_complaint(complaint_id, data):
     conn.close()
 
 
+def delete_complaint(complaint_id: int) -> bool:
+    conn = get_connection()
+    conn.execute("DELETE FROM complaint_attachments WHERE complaint_id = ?", (complaint_id,))
+    cursor = conn.execute("DELETE FROM complaints WHERE id = ?", (complaint_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
 def save_attachment_record(
     *,
     session_id: str | None,

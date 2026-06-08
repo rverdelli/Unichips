@@ -85,6 +85,32 @@ class AttachmentPersistenceTest(unittest.TestCase):
 
         self.assertEqual(json.loads(complaint["conversation_history"]), conversation)
 
+    def test_delete_complaint_removes_attachment_records(self):
+        complaint_id = database.save_complaint({
+            "name": "Mario Rossi",
+            "email": "mario@example.com",
+            "product": "Classica",
+            "problem_category": "Patatina bruciata",
+            "description": "Patatine bruciate nella confezione.",
+            "lot_code": "LT12345",
+            "status": "Aperto",
+            "classification": "complesso",
+        })
+        database.save_attachment_record(
+            session_id="sess_test",
+            complaint_id=complaint_id,
+            original_filename="foto.png",
+            stored_path=f"complaints/{complaint_id}/foto.png",
+            content_type="image/png",
+            size_bytes=1234,
+        )
+
+        deleted = database.delete_complaint(complaint_id)
+
+        self.assertTrue(deleted)
+        self.assertIsNone(database.get_complaint_by_id(complaint_id))
+        self.assertEqual(database.get_complaint_attachments(complaint_id), [])
+
 
 if __name__ == "__main__":
     unittest.main()

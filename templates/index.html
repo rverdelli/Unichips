@@ -541,7 +541,7 @@ async function handleFilesSelected(input) {
   drop.classList.add('uploading');
   progressWrap.style.display = 'block';
   progressBar.style.width = '35%';
-  dropText.textContent = `Caricamento di ${files.length} immagine${files.length > 1 ? 'i' : ''}...`;
+  dropText.textContent = `Caricamento di ${files.length} ${imageLabel(files.length)}...`;
 
   const form = new FormData();
   form.append('session_id', sessionId);
@@ -557,8 +557,8 @@ async function handleFilesSelected(input) {
     uploadedAttachments = uploadedAttachments.concat(data.attachments || []);
     renderUploadedAttachments();
     updateUploadOk();
-    addMessage('bot', `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`,
-      `${data.count} immagine${data.count > 1 ? 'i' : ''} caricat${data.count > 1 ? 'e' : 'a'} correttamente.`);
+    const uploadMessage = `${data.count} ${imageLabel(data.count)} ${data.count > 1 ? 'caricate' : 'caricata'} correttamente.`;
+    addMessage('bot', uploadMessage, uploadMessage);
   } catch (e) {
     addMessage('bot', 'Upload immagine non riuscito: ' + escapeHtml(e.message || 'riprova.'));
   } finally {
@@ -608,8 +608,12 @@ function updateUploadOk() {
     ok.style.display = 'none';
     return;
   }
-  ok.textContent = `${uploadedAttachments.length} immagine${uploadedAttachments.length > 1 ? 'i' : ''} allegate al reclamo`;
+  ok.textContent = `${uploadedAttachments.length} ${imageLabel(uploadedAttachments.length)} ${uploadedAttachments.length > 1 ? 'allegate' : 'allegata'} al reclamo`;
   ok.style.display = 'block';
+}
+
+function imageLabel(count) {
+  return count === 1 ? 'immagine' : 'immagini';
 }
 
 // ── Message rendering ────────────────────────────────────────────────────────

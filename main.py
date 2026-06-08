@@ -23,7 +23,7 @@ from modules.database import (
     update_complaint, save_complaint,
     get_chatbot_config, save_chatbot_config, get_stats, DB_PATH, UPLOAD_ROOT,
     save_attachment_record, get_pending_attachments, attach_pending_attachment,
-    get_complaint_attachments, get_attachment_by_id,
+    get_complaint_attachments, get_attachment_by_id, delete_complaint,
 )
 from modules.chatbot import init_state, process_message
 from modules.chatbot import build_conversation_history
@@ -150,6 +150,29 @@ def _claim_session_attachments(session_id: str, complaint_id: int) -> int:
         claimed += 1
 
     return claimed
+
+
+def _delete_complaint_upload_files(complaint_id: int, attachments: list[dict]) -> int:
+    deleted = 0
+    for attachment in attachments:
+        stored_path = attachment.get("stored_path")
+        if not stored_path:
+            continue
+        path = _stored_path_to_abs(stored_path)
+        if path.exists() and path.is_file():
+            path.unlink()
+            deleted += 1
+
+    root = UPLOAD_ROOT.resolve()
+    complaint_dir = (UPLOAD_ROOT / "complaints" / str(complaint_id)).resolve()
+    try:
+        complaint_dir.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Percorso upload reclamo non valido") from exc
+
+    if complaint_dir.exists():
+        shutil.rmtree(complaint_dir)
+    return deleted
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -383,6 +406,25 @@ async def admin_update_complaint(complaint_id: int, payload: ComplaintUpdate):
         data["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     update_complaint(complaint_id, data)
     return {"ok": True}
+
+
+@app.delete("/admin/api/complaints/{complaint_id}")
+async def admin_delete_complaint(complaint_id: int):
+    row = get_complaint_by_id(complaint_id)
+    if not row:
+        return JSONResponse(status_code=404, content={"error": "Reclamo non trovato"})
+
+    attachments = get_complaint_attachments(complaint_id)
+    try:
+        deleted_files = _delete_complaint_upload_files(complaint_id, attachments)
+    except OSError as exc:
+        logger.error("Unable to delete upload files for complaint %s: %s", complaint_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Impossibile eliminare tutti gli allegati del reclamo") from exc
+
+    deleted = delete_complaint(complaint_id)
+    if not deleted:
+        return JSONResponse(status_code=404, content={"error": "Reclamo non trovato"})
+    return {"ok": True, "deleted_files": deleted_files}
 
 
 @app.get("/admin/api/stats")

@@ -205,14 +205,19 @@ input[type="date"]:focus { border-color: #D42B2B; }
   position: relative;
 }
 @keyframes modalIn {
-  from { transform: translateY(20px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .modal-header {
   padding: 18px 24px; border-bottom: 1px solid #f0f0f0;
   display: flex; align-items: center; gap: 12px; flex-shrink: 0;
 }
 .modal-title { font-size: 17px; font-weight: 700; flex: 1; }
+.modal-conversation-slot {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
 .modal-close {
   width: 32px; height: 32px; border-radius: 50%; border: none;
   background: #f5f5f5; cursor: pointer; font-size: 18px;
@@ -313,40 +318,63 @@ input[type="date"]:focus { border-color: #D42B2B; }
 .btn-back { background: none; border: none; color: #D42B2B; cursor: pointer;
             font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
 
+.context-menu {
+  position: fixed;
+  min-width: 210px;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.18);
+  padding: 5px;
+  z-index: 950;
+  display: none;
+}
+.context-menu.open { display: block; }
+.context-menu button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: #333;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.context-menu button:hover { background: #f7f7f7; }
+.context-menu button.danger { color: #c0392b; font-weight: 600; }
+
 /* ── Conversation panel ── */
 .conversation-fab {
-  position: absolute;
-  right: 22px;
-  bottom: 72px;
-  width: 46px;
-  height: 46px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: none;
-  background: #D42B2B;
-  color: #fff;
+  background: #f5f5f5;
+  color: #D42B2B;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 5px 22px rgba(212,43,43,.38);
-  z-index: 4;
-  transition: transform .15s, box-shadow .15s, background .15s;
+  transition: background .15s, color .15s;
 }
 .conversation-fab:hover {
-  background: #b82020;
-  transform: translateY(-1px);
-  box-shadow: 0 7px 28px rgba(212,43,43,.46);
+  background: #ececec;
+  color: #b82020;
 }
 .conversation-fab.is-disabled {
-  background: #cfcfcf;
-  box-shadow: none;
+  color: #b8b8b8;
   cursor: not-allowed;
 }
-.conversation-fab svg { width: 22px; height: 22px; pointer-events: none; }
+.conversation-fab svg { width: 17px; height: 17px; pointer-events: none; }
 .conversation-panel {
-  position: absolute;
-  right: 22px;
-  bottom: 128px;
+  position: fixed;
+  right: max(28px, calc((100vw - 880px) / 2 + 28px));
+  top: 82px;
   width: min(390px, calc(100% - 44px));
   max-height: min(560px, calc(90vh - 150px));
   background: #fff;
@@ -356,7 +384,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
   overflow: hidden;
   display: none;
   flex-direction: column;
-  z-index: 5;
+  z-index: 775;
 }
 .conversation-panel.open { display: flex; }
 .conversation-panel.is-large {
@@ -365,7 +393,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
   width: auto;
   max-height: none;
   border-radius: 18px;
-  z-index: 760;
+  z-index: 780;
 }
 .conversation-header {
   background: #D42B2B;
@@ -474,7 +502,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
     left: 16px;
     right: 16px;
     width: auto;
-    bottom: 126px;
+    top: 70px;
   }
   .conversation-panel.is-large { inset: 12px; }
 }
@@ -664,6 +692,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
   <div class="modal" id="modal">
     <div class="modal-header">
       <div class="modal-title" id="modal-title">Reclamo #—</div>
+      <div class="modal-conversation-slot" id="modal-conversation-slot"></div>
       <button class="modal-close" onclick="closeModal()">×</button>
     </div>
     <div class="modal-body" id="modal-body"></div>
@@ -729,6 +758,7 @@ input[type="date"]:focus { border-color: #D42B2B; }
 
 <!-- ── TOAST ── -->
 <div id="toast"></div>
+<div class="context-menu" id="context-menu" onclick="event.stopPropagation()"></div>
 
 <script>
 // ════════════════════════════════════════════════════════
@@ -902,7 +932,7 @@ function renderTable(items) {
     return;
   }
   tbody.innerHTML = items.map(c => `
-    <tr onclick="openModal(${c.id})">
+    <tr onclick="openModal(${c.id})" oncontextmenu="showComplaintContextMenu(event, ${c.id})">
       <td><strong>#${c.id}</strong></td>
       <td class="td-sm">${(c.created_at||'').slice(0,10)}</td>
       <td>${esc(c.customer_name||'—')}</td>
@@ -930,6 +960,54 @@ function renderPagination(total, page) {
   }
   if (page < pages-1) html += `<button class="page-btn" onclick="loadComplaints(${page+1})">›</button>`;
   document.getElementById('pagination').innerHTML = html;
+}
+
+function showComplaintContextMenu(event, id) {
+  event.preventDefault();
+  event.stopPropagation();
+  const menu = document.getElementById('context-menu');
+  menu.innerHTML = `
+    <button class="danger" onclick="deleteComplaint(${id})">
+      <span>🗑</span>
+      <span>Elimina reclamo #${id}</span>
+    </button>`;
+  menu.classList.add('open');
+
+  const pad = 8;
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - rect.width - pad);
+  const top = Math.min(event.clientY, window.innerHeight - rect.height - pad);
+  menu.style.left = Math.max(pad, left) + 'px';
+  menu.style.top = Math.max(pad, top) + 'px';
+}
+
+function closeContextMenu() {
+  const menu = document.getElementById('context-menu');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.innerHTML = '';
+}
+
+async function deleteComplaint(id) {
+  closeContextMenu();
+  const ok = confirm(`Eliminare definitivamente il reclamo #${id} e tutti gli allegati associati?`);
+  if (!ok) return;
+
+  try {
+    const r = await fetch(`/admin/api/complaints/${id}`, { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.detail || data.error || 'Eliminazione non riuscita');
+
+    showToast(`Reclamo #${id} eliminato`);
+    const nextPage = lastItems.length <= 1 && currentPage > 0 ? currentPage - 1 : currentPage;
+    await loadComplaints(nextPage);
+    await loadKpiGestione();
+    if (document.getElementById('tab-analisi').classList.contains('active')) {
+      loadAnalytics();
+    }
+  } catch (e) {
+    showToast(e.message || 'Errore durante eliminazione reclamo', true);
+  }
 }
 
 async function quickClose(id) {
@@ -978,6 +1056,7 @@ async function openModal(id) {
   const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
   const gravSpan    = `<span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span>`;
   const conversation = getConversationItems(c.conversation_history);
+  document.getElementById('modal-conversation-slot').innerHTML = renderConversationLauncher(conversation);
 
   document.getElementById('modal-body').innerHTML = `
     <!-- Left col -->
@@ -1043,8 +1122,7 @@ async function openModal(id) {
         </div>
         <div class="response-editor" id="modal-response" contenteditable="true">${renderDraft(buildResolutionDraft(c))}</div>
       `}
-    </div>
-    ${renderConversationLauncher(conversation)}`;
+    </div>`;
 
   document.getElementById('modal-actions').innerHTML = isClosed ? '' : `
     <button class="btn btn-primary" onclick="sendResponse(${c.id}, false)">📨 Invia risposta</button>
@@ -1061,6 +1139,7 @@ async function openModal(id) {
 function closeModal(e) {
   if (e && e.target !== document.getElementById('modal-overlay')) return;
   document.getElementById('modal-overlay').classList.remove('open');
+  document.getElementById('modal-conversation-slot').innerHTML = '';
   document.body.style.overflow = '';
   loadComplaints(currentPage);
 }
@@ -1496,8 +1575,10 @@ function showToast(msg, isError = false) {
 
 // Close modal with ESC
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeConfig(); }
+  if (e.key === 'Escape') { closeContextMenu(); closeModal(); closeConfig(); }
 });
+document.addEventListener('click', closeContextMenu);
+document.addEventListener('scroll', closeContextMenu, true);
 </script>
 </body>
 </html>
