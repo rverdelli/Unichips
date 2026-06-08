@@ -234,6 +234,33 @@ input[type="date"]:focus { border-color: #D42B2B; }
 .info-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .info-label { color: #999; min-width: 130px; flex-shrink: 0; }
 .info-val { color: #222; font-weight: 500; }
+.inline-select {
+  width: 100%;
+  max-width: 260px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 12.5px;
+  font-family: inherit;
+  background: #fff;
+  color: #222;
+  outline: none;
+}
+.inline-select:focus { border-color: #D42B2B; }
+.inline-select:disabled { color: #aaa; background: #f7f7f7; }
+.short-note-input {
+  width: 100%;
+  max-width: 260px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 12.5px;
+  font-family: inherit;
+  background: #fff;
+  color: #222;
+  outline: none;
+}
+.short-note-input:focus { border-color: #D42B2B; }
 .timeline-item {
   display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start;
 }
@@ -788,6 +815,8 @@ const STATUS_BADGE = {
 };
 const PRIO_CLASS = { 'Alta':'prio-alta','Media':'prio-media','Bassa':'prio-bassa' };
 const CH_ICON = { chatbot:'🤖', email:'📧', telefono:'📞', social:'📱' };
+let clusterOptions = [];
+let clusterNoteTimer = null;
 
 // ════════════════════════════════════════════════════════
 // INIT
@@ -804,6 +833,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
   await checkStatus();
+  await loadClusterOptions();
   await loadCategories();
   await loadComplaints();
   await loadKpiGestione();
@@ -1047,14 +1077,97 @@ function kpiCard(color, val, label) {
 // ════════════════════════════════════════════════════════
 // MODAL DETAIL
 // ════════════════════════════════════════════════════════
+async function loadClusterOptions() {
+  try {
+    const r = await fetch('/admin/api/config');
+    const d = await r.json();
+    clusterOptions = Array.isArray(d.clusters) ? d.clusters.map(c => ({
+      cluster1: String(c.cluster1 || '').trim(),
+      cluster2: String(c.cluster2 || '').trim(),
+      gravity: String(c.gravity || '').trim(),
+    })).filter(c => c.cluster1 || c.cluster2) : [];
+  } catch(_) {
+    clusterOptions = [];
+  }
+}
+
+async function ensureClusterOptions() {
+  if (!clusterOptions.length) await loadClusterOptions();
+}
+
+function uniqueValues(values, current = '') {
+  const seen = new Set();
+  const out = [];
+  values.concat(current ? [current] : []).forEach(v => {
+    const value = String(v || '').trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    out.push(value);
+  });
+  return out;
+}
+
+function getCluster1Options(current = '') {
+  return uniqueValues(clusterOptions.map(c => c.cluster1), current);
+}
+
+function getCluster2Options(cluster1, current = '') {
+  const selected = String(cluster1 || '').trim();
+  const rows = selected ? clusterOptions.filter(c => c.cluster1 === selected) : [];
+  return uniqueValues(rows.map(c => c.cluster2), current);
+}
+
+function findClusterConfig(cluster1, cluster2) {
+  const c1 = String(cluster1 || '').trim();
+  const c2 = String(cluster2 || '').trim();
+  return clusterOptions.find(c => c.cluster1 === c1 && c.cluster2 === c2);
+}
+
+function renderSelectOptions(values, current, placeholder) {
+  const selected = String(current || '').trim();
+  return [
+    `<option value="">${placeholder}</option>`,
+    ...values.map(v => `<option value="${attr(v)}" ${v===selected?'selected':''}>${esc(v)}</option>`),
+  ].join('');
+}
+
+function renderCluster1Select(c) {
+  const current = String(c.cluster1 || '').trim();
+  return `<select class="inline-select" id="modal-cluster1" onchange="onCluster1Changed(${c.id})" aria-label="Cluster 1">
+    ${renderSelectOptions(getCluster1Options(current), current, 'Seleziona cluster 1')}
+  </select>`;
+}
+
+function renderCluster2Select(c) {
+  const cluster1 = String(c.cluster1 || '').trim();
+  const current = String(c.cluster2 || '').trim();
+  const disabled = cluster1 ? '' : ' disabled';
+  return `<select class="inline-select" id="modal-cluster2" onchange="onCluster2Changed(${c.id})" aria-label="Cluster 2"${disabled}>
+    ${renderSelectOptions(getCluster2Options(cluster1, current), current, cluster1 ? 'Seleziona cluster 2' : 'Prima scegli cluster 1')}
+  </select>`;
+}
+
+function renderClusterNoteInput(c) {
+  const value = String(c.cluster_note || '').trim();
+  return `<input class="short-note-input" id="modal-cluster-note" type="text" maxlength="80"
+    value="${attr(value)}" oninput="onClusterNoteInput(${c.id})" onblur="saveClusterNote(${c.id})"
+    aria-label="Descrizione breve">`;
+}
+
+function renderGravityValue(value) {
+  const gravity = String(value || '').trim();
+  return `<span id="modal-gravity" class="${PRIO_CLASS[gravity]||''}">${esc(gravity || '—')}</span>`;
+}
+
 async function openModal(id) {
+  await ensureClusterOptions();
   const r = await fetch(`/admin/api/complaints/${id}`);
   const c = await r.json();
   document.getElementById('modal-title').textContent = `Reclamo #${c.id} — ${c.customer_name||''}`;
 
   const isClosed = ['Chiuso','Chiuso automaticamente'].includes(c.status);
   const statusBadge = `<span class="badge ${STATUS_BADGE[c.status]||'badge-aperto'}">${c.status||'—'}</span>`;
-  const gravSpan    = `<span class="${PRIO_CLASS[c.gravity||c.priority]||''}">${c.gravity||c.priority||'—'}</span>`;
+  const gravSpan    = renderGravityValue(c.gravity||c.priority);
   const conversation = getConversationItems(c.conversation_history);
   document.getElementById('modal-conversation-slot').innerHTML = renderConversationLauncher(conversation);
 
@@ -1070,8 +1183,9 @@ async function openModal(id) {
       ${infoRow('Codice lotto', c.lot_code||'—')}
       ${infoRow('Scadenza', c.expiry_date||'—')}
       ${infoRow('Punto vendita', c.purchase_location||'—')}
-      ${infoRow('Cluster 1', c.cluster1||'—')}
-      ${infoRow('Cluster 2', c.cluster2||'—')}
+      ${infoRow('Cluster 1', renderCluster1Select(c))}
+      ${infoRow('Cluster 2', renderCluster2Select(c))}
+      ${infoRow('Descrizione breve', renderClusterNoteInput(c))}
       ${infoRow('Risposta automatica', c.auto_response ? '✅ Sì' : '❌ No')}
       ${infoRow('Stato', statusBadge)}
       ${infoRow('Gravità', gravSpan)}
@@ -1146,6 +1260,80 @@ function closeModal(e) {
 
 function infoRow(label, val) {
   return `<div class="info-row"><span class="info-label">${label}</span><span class="info-val">${val}</span></div>`;
+}
+
+async function onCluster1Changed(id) {
+  const cluster1El = document.getElementById('modal-cluster1');
+  const cluster2El = document.getElementById('modal-cluster2');
+  if (!cluster1El || !cluster2El) return;
+
+  const cluster1 = cluster1El.value.trim();
+  const previousCluster2 = cluster2El.value.trim();
+  const options = getCluster2Options(cluster1, '');
+  const nextCluster2 = options.includes(previousCluster2)
+    ? previousCluster2
+    : (options.length === 1 ? options[0] : '');
+
+  cluster2El.innerHTML = renderSelectOptions(options, nextCluster2, cluster1 ? 'Seleziona cluster 2' : 'Prima scegli cluster 1');
+  cluster2El.disabled = !cluster1;
+  cluster2El.value = nextCluster2;
+  await saveClusterSelection(id);
+}
+
+async function onCluster2Changed(id) {
+  await saveClusterSelection(id);
+}
+
+async function saveClusterSelection(id) {
+  const cluster1 = (document.getElementById('modal-cluster1')?.value || '').trim();
+  const cluster2 = (document.getElementById('modal-cluster2')?.value || '').trim();
+  const match = findClusterConfig(cluster1, cluster2);
+  const payload = { cluster1, cluster2 };
+  if (match && match.gravity) payload.gravity = match.gravity;
+
+  try {
+    const r = await fetch(`/admin/api/complaints/${id}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.detail || data.error || 'Aggiornamento non riuscito');
+
+    const gravityEl = document.getElementById('modal-gravity');
+    if (gravityEl && match && match.gravity) {
+      gravityEl.className = PRIO_CLASS[match.gravity] || '';
+      gravityEl.textContent = match.gravity;
+    }
+    showToast('Cluster aggiornati');
+    await loadComplaints(currentPage);
+    if (document.getElementById('tab-analisi').classList.contains('active')) {
+      loadAnalytics();
+    }
+  } catch (e) {
+    showToast(e.message || 'Errore durante aggiornamento cluster', true);
+  }
+}
+
+function onClusterNoteInput(id) {
+  clearTimeout(clusterNoteTimer);
+  clusterNoteTimer = setTimeout(() => saveClusterNote(id), 550);
+}
+
+async function saveClusterNote(id) {
+  const noteEl = document.getElementById('modal-cluster-note');
+  if (!noteEl) return;
+  const cluster_note = noteEl.value.trim();
+
+  try {
+    const r = await fetch(`/admin/api/complaints/${id}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cluster_note})
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) throw new Error(data.detail || data.error || 'Salvataggio non riuscito');
+  } catch (e) {
+    showToast(e.message || 'Errore durante salvataggio descrizione breve', true);
+  }
 }
 
 function getConversationItems(value) {
@@ -1473,6 +1661,11 @@ async function openConfig() {
     document.getElementById('cfg-knowledge').value = d.common_knowledge || '';
     document.getElementById('cfg-products').value  = Array.isArray(d.products) ? d.products.join('\n') : '';
     cfgClusters = Array.isArray(d.clusters) ? JSON.parse(JSON.stringify(d.clusters)) : [];
+    clusterOptions = cfgClusters.map(c => ({
+      cluster1: String(c.cluster1 || '').trim(),
+      cluster2: String(c.cluster2 || '').trim(),
+      gravity: String(c.gravity || '').trim(),
+    })).filter(c => c.cluster1 || c.cluster2);
     renderClusterTable(cfgClusters);
     const hasKey = !!d.anthropic_api_key;
     document.getElementById('api-key-status').innerHTML =
@@ -1504,6 +1697,11 @@ async function saveConfig() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(payload)
     });
+    clusterOptions = cfgClusters.map(c => ({
+      cluster1: String(c.cluster1 || '').trim(),
+      cluster2: String(c.cluster2 || '').trim(),
+      gravity: String(c.gravity || '').trim(),
+    })).filter(c => c.cluster1 || c.cluster2);
     showToast('Configurazione salvata con successo');
     closeConfig();
     checkStatus();
@@ -1517,6 +1715,10 @@ async function saveConfig() {
 // ════════════════════════════════════════════════════════
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function attr(s) {
+  return esc(s).replace(/"/g, '&quot;');
 }
 
 function renderDraft(text) {

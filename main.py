@@ -194,6 +194,10 @@ class ComplaintUpdate(BaseModel):
     ai_response: str | None = None
     closed_at: str | None = None
     priority: str | None = None
+    cluster1: str | None = None
+    cluster2: str | None = None
+    cluster_note: str | None = None
+    gravity: str | None = None
 
 class ConfigPayload(BaseModel):
     common_knowledge: str = ""

@@ -37,6 +37,7 @@ def _migrate_db(conn):
     for col, definition in [
         ("cluster1", "TEXT DEFAULT ''"),
         ("cluster2", "TEXT DEFAULT ''"),
+        ("cluster_note", "TEXT DEFAULT ''"),
         ("gravity",  "TEXT DEFAULT ''"),
         ("conversation_history", "TEXT DEFAULT ''"),
     ]:
@@ -69,7 +70,7 @@ _COMPLAINT_LIST_COLUMNS = """
     problem_category, description, lot_code, expiry_date,
     purchase_location, status, priority, channel, classification,
     auto_response, ai_response, closed_at, has_photo, cluster1,
-    cluster2, gravity
+    cluster2, cluster_note, gravity
 """
 
 
@@ -115,6 +116,7 @@ def init_db():
             has_photo INTEGER DEFAULT 0,
             cluster1 TEXT DEFAULT '',
             cluster2 TEXT DEFAULT '',
+            cluster_note TEXT DEFAULT '',
             gravity TEXT DEFAULT '',
             conversation_history TEXT DEFAULT ''
         )
@@ -164,8 +166,8 @@ def save_complaint(data):
         (customer_name, customer_email, product, problem_category, description,
          lot_code, expiry_date, purchase_location, status, priority, channel,
          classification, auto_response, ai_response, has_photo, cluster1, cluster2,
-         gravity, conversation_history)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         cluster_note, gravity, conversation_history)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     """, (
         data.get("name"), data.get("email"), data.get("product"),
         data.get("problem_category"), data.get("description"),
@@ -174,7 +176,8 @@ def save_complaint(data):
         gravity, data.get("channel", "chatbot"),
         data.get("classification"), 1 if data.get("auto_response") else 0,
         data.get("ai_response", ""), 1 if data.get("has_photo") else 0,
-        data.get("cluster1", ""), data.get("cluster2", ""), gravity,
+        data.get("cluster1", ""), data.get("cluster2", ""),
+        data.get("cluster_note", ""), gravity,
         _serialize_conversation_history(data.get("conversation_history")),
     ))
     complaint_id = cursor.lastrowid

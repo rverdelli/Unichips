@@ -111,6 +111,32 @@ class AttachmentPersistenceTest(unittest.TestCase):
         self.assertIsNone(database.get_complaint_by_id(complaint_id))
         self.assertEqual(database.get_complaint_attachments(complaint_id), [])
 
+    def test_complaint_clusters_can_be_updated(self):
+        complaint_id = database.save_complaint({
+            "name": "Mario Rossi",
+            "email": "mario@example.com",
+            "product": "Classica",
+            "problem_category": "Patatina bruciata",
+            "description": "Patatine bruciate nella confezione.",
+            "lot_code": "LT12345",
+            "status": "Aperto",
+            "classification": "complesso",
+        })
+
+        database.update_complaint(complaint_id, {
+            "cluster1": "ORGANOLETTICO",
+            "cluster2": "DIFETTI VISIVI",
+            "cluster_note": "chips bruciate",
+            "gravity": "Media",
+        })
+
+        complaint = database.get_complaint_by_id(complaint_id)
+
+        self.assertEqual(complaint["cluster1"], "ORGANOLETTICO")
+        self.assertEqual(complaint["cluster2"], "DIFETTI VISIVI")
+        self.assertEqual(complaint["cluster_note"], "chips bruciate")
+        self.assertEqual(complaint["gravity"], "Media")
+
 
 if __name__ == "__main__":
     unittest.main()
